@@ -250,6 +250,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private static int lastFocused = 0;
     /** App of the last focused tile, so focus follows it when the app list changes. */
     private static String lastFocusedKey;
+    /** Dock tile focused last, where Back from the grid below the dock returns to. */
+    private static int lastDockFocused = 0;
     private float density;
     /** Module cards (res/values/config.xml, module_cards): discovered on resume, shown only after the owner's Show. */
     private boolean moduleCards;
@@ -1056,6 +1058,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (gameDay != null && !stopped) gameDay.read();
         grid.scrollToPosition(0);
         lastFocused = 0;
+        lastDockFocused = 0;
         lastFocusedKey = adapter.getItemCount() > 0 ? adapter.keyAt(0) : null;
         if (stopped) {
             tileRefresh.onHomeAgain();
@@ -1757,7 +1760,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     @SuppressWarnings("deprecation")
     public void onBackPressed() {
-        // Home screen: Back goes nowhere, unless back_opens_clock is on.
+        // Home screen: from the grid below the dock, Back returns to the dock tile focused last (focusing a dock
+        // tile scrolls its row back to the top). Elsewhere Back goes nowhere, unless back_opens_clock is on.
+        if (dockRow && !singleRow) {
+            View focus = getCurrentFocus();
+            View item = focus != null ? grid.findContainingItemView(focus) : null;
+            if (item != null && grid.getChildAdapterPosition(item) >= COLUMNS) {
+                focusTile(Math.min(lastDockFocused, COLUMNS - 1));
+                return;
+            }
+        }
         if (backOpensClock) startActivity(new Intent(this, ClockActivity.class));
     }
 
@@ -1798,6 +1810,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public void onTileFocused(int position, View card) {
         lastFocused = position;
         lastFocusedKey = adapter.keyAt(position);
+        if (position < COLUMNS) lastDockFocused = position;
         // Focus restored before the first layout (cold start): the tile has no size yet, and the glass
         // would be sized to 2*pad. Run again once the tile is laid out.
         if (card.getWidth() == 0) {

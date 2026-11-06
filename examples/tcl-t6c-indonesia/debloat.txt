@@ -1,0 +1,86 @@
+# TCL T6C, Indonesia (device G10, product G10_4K_GB_NF_32BIT, model "Smart TV", Realtek, 1.8 GB)
+# Android 12 (Google TV), firmware STT2.230203.001 AS50, product info V8-0008T01-LF1V590
+# Same G10 platform and build as tcl-g10-google-tv/, tcl-55p8ls/, tcl-55s470g/ and tcl-55p7k/.
+# Nothing ships disabled at the factory: Samba TV ACR, logkit and ttvs are all enabled.
+#
+# Apply:   TV_HOST=<tv ip> tools/disable.sh examples/tcl-t6c-indonesia/debloat.txt
+# Undo:    TV_HOST=<tv ip> tools/restore.sh examples/tcl-t6c-indonesia/debloat.txt com.google.android.apps.tv.launcherx
+# Everything is DISABLED, not uninstalled. Comment out any line you want to keep.
+#
+# Stock launcher: com.google.android.apps.tv.launcherx. Live TV / HDMI app: com.tcl.tv.
+# Keep: com.tcl.tv, com.tcl.tvinput, com.tcl.suspension (Input picker), com.tcl.dashboard,
+# com.tcl.autopair, com.tcl.systemserver, com.tcl.providers.config, com.tcl.initsetup,
+# com.tcl.factory.view, com.tcl.useragreement, com.tcl.globalkeyoverlay,
+# com.tcl.inputmethod.international, com.tcl.hearaid, com.tcl.android.webview, all com.realtek.*,
+# com.tvos, com.google.android.partnersetup, com.google.android.tts, com.seraphic.openinet.pre.
+# Kept by choice on this TV: com.tcl.ttvs (firmware updater, see below), com.tcl.ui_mediaCenter (USB),
+# com.tcl.airplay2 + com.realtek.airplay2, com.tcl.miracast, com.google.android.apps.mediashell
+# (Chromecast), com.google.android.katniss + com.google.android.tv.remote.service (Assistant on the
+# mic button), Netflix, YouTube, Prime Video, Bilibili, Vidio.
+#
+# Known on this unit:
+# - The saved Wi-Fi network belongs to android.uid.system, so setupwraith can go without dropping Wi-Fi.
+# - com.tcl.ttvs hosts the firmware updater (versionUpdateApp SystemUpdateReceiver/UpdateEntranceActivity)
+#   and T-Cast, besides TCL analytics (TrackDataService, UsagestService, BIService) and the Samba video
+#   service. Kept here for firmware updates.
+# - A second Android user (id 10) exists; the list only touches user 0.
+# - The Samba opt-out is not reachable here: Settings > Privacy has no Samba entry (its settings
+#   activities are not exported, and TvSettings shows no Samba slice on this firmware). With
+#   tv.samba.ssm.ui disabled and ttvs kept, Samba stayed disabled and no Samba service ran after a reboot.
+# - Same key-repeat trade as docs/devices/tcl-55p71b-g09-key-repeat.md: with InputKeyService and
+#   HomeKeyService bound (capabilities=8), holding Vol+/Vol- moves one step per press; without them it
+#   ramps. "consume_volume_keys": true from a theme (key_filter true) did not bring the ramp back.
+#   Kept both helpers for the remote buttons and lives with one step per press.
+# - Launcher handover: install with STOCK_LAUNCHER=none first, then disable setupwraith, then launcherx,
+#   then set-home-activity (mFocusedApp confirmed the new launcher), then dreamx after
+#   screensaver_components was set to com.gathin.tvhome/.ClockDream. APP_AUTO_START needed (the
+#   install script sets it with appops write-settings).
+
+# Batch 1: tracking and analytics
+tv.samba.ssm.ui                        # Samba TV ACR viewing tracking
+com.tcl.logkit                         # log capture and upload
+com.tcl.usercenter                     # TCL account sign-in nags
+com.google.android.feedback
+
+# Batch 2: TCL content, ads and promos
+com.tcl.tv.tclhome_passive             # pushes TCL content to the home screen at boot
+com.tcl.partnercustomizer              # TCL tab and rows on the Google TV home
+com.tcl.interactive                    # TCL TIAS background service
+com.tcl.messagebox                     # TCL push messages and promos
+android.autoinstalls.config.google.gtvpai   # silently installs partner apps
+com.tcl.waterfall.overseas             # TCL Channel
+com.tcl.channelplus                    # TCL Live FAST channels, also inside Live TV
+
+# Batch 3: retail demo, hotel mode, manuals
+com.tcl.exhibit
+com.tcl.esticker
+com.tcl.hotelmenu
+com.tcl.ocean.instructions             # e-manual
+com.tcl.repairguide
+com.tcl.guard                          # TGuard memory "cleaner"
+com.google.android.marvin.talkback
+
+# Batch 4: features not used on this TV
+com.tcl.magiconnectfree                # MagiConnect / T-Cast phone app
+com.tcl.smartalexa                     # Alexa
+com.tcl.t_solo                         # T-Solo, listen on Bluetooth headphones
+com.tcl.gamebar                        # re-enable for the console game-mode overlay
+com.tcl.UpdatePeripheral               # re-enable to update a TCL soundbar
+com.tcl.browser                        # TCL browser; the remote's Web key may open it
+
+# Batch 5: streaming apps and games not watched on this TV
+com.google.android.youtube.tvmusic
+in.startv.hotstar.dplus.tv             # Disney+ Hotstar
+id.visionplus.android.atv              # Vision+
+com.tencent.qqlivei18n                 # WeTV
+com.iqiyi.i18n.tv                      # iQIYI
+com.spotify.tv.android
+com.google.android.videos              # Google TV / Play Movies
+com.google.android.play.games
+com.FDGEntertainment.redball4.gp       # Red Ball 4 (game)
+
+# Needed for the custom launcher. Disable only AFTER launcher/ is installed and confirmed as Home.
+# Before dreamx: settings put secure screensaver_components com.gathin.tvhome/.ClockDream
+com.google.android.tungsten.setupwraith
+com.google.android.apps.tv.launcherx
+com.google.android.apps.tv.dreamx      # ambient mode screensaver (promos)

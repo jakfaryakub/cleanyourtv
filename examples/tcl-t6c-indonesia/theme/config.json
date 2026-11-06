@@ -1,0 +1,26 @@
+{
+  "dock_apps": [
+    "com.google.android.youtube.tv",
+    "com.netflix.ninja",
+    "com.vidio.android.tv",
+    "com.amazon.amazonvideo.livingroom",
+    "com.bstar.intl.tv"
+  ],
+  "background_color": "#090C14",
+  "wallpaper": true,
+  "cinematic_home": true,
+  "dock_glass": true,
+  "icon_only_buttons": true,
+  "app_glow": true,
+  "glow_style": "horizon",
+  "focus_overshoot": false,
+  "advanced_effects": true,
+  "app_keys": [
+    "4065:com.google.android.youtube.tv",
+    "4062:com.netflix.ninja",
+    "4099:com.amazon.amazonvideo.livingroom",
+    "4001:com.tcl.tv"
+  ],
+  "app_library": true,
+  "tile_menu": true
+}
