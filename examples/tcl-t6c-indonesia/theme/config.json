@@ -22,5 +22,6 @@
     "4001:com.tcl.tv"
   ],
   "app_library": true,
-  "tile_menu": true
+  "tile_menu": true,
+  "ambient_glow": false
 }
