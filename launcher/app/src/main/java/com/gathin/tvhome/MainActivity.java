@@ -457,10 +457,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh). Read before the
+        // layout, so a theme font (config.json font) is in place when the views are inflated.
+        Config cfg = Config.load(this);
+        ThemeFontFactory.install(getWindow(), ThemeFont.load(this, cfg));
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
-        // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
-        Config cfg = Config.load(this);
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
         clockFormat = cfg.clockFormat;
         ClockFormat.apply(getWindow().getDecorView(), clockFormat);

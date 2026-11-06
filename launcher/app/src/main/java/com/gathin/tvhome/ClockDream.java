@@ -16,8 +16,10 @@ public class ClockDream extends DreamService {
         setInteractive(false);   // any key wakes the TV back to where it was
         setFullscreen(true);
         setScreenBright(false);
+        Config cfg = Config.load(this);
+        ThemeFontFactory.install(getWindow(), ThemeFont.load(this, cfg));
         setContentView(R.layout.dream_clock);
-        ClockFormat.apply(getWindow().getDecorView(), Config.load(this).clockFormat);
+        ClockFormat.apply(getWindow().getDecorView(), cfg.clockFormat);
         scene = new ClockScene(getWindow().getDecorView());
         scene.useHomeWallpaper(this);
     }
