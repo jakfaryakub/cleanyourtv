@@ -50,6 +50,12 @@ public class ThemeProvider extends ContentProvider {
             if (images != null) for (File f : images) if (f.delete()) n++;
             return n;
         }
+        if (dir != null && ThemeFiles.isFonts(uri.getPathSegments())) {
+            File[] fonts = new File(dir, ThemeFiles.FONTS).listFiles((d, name) -> ThemeFiles.fontFile(name));
+            int n = 0;
+            if (fonts != null) for (File f : fonts) if (f.delete()) n++;
+            return n;
+        }
         try {
             return file(uri).delete() ? 1 : 0;
         } catch (FileNotFoundException e) {

@@ -49,4 +49,30 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.isCollection(Arrays.asList("wallpapers", "dusk.jpg")));
         assertFalse(ThemeFiles.isCollection(Collections.singletonList("config.json")));
     }
+
+    @Test public void themeFontsAreAllowed() {
+        assertEquals("fonts/plus-jakarta-sans.ttf", ThemeFiles.path(Arrays.asList("fonts", "plus-jakarta-sans.ttf")));
+        assertEquals("fonts/Inter_2.OTF", ThemeFiles.path(Arrays.asList("fonts", "Inter_2.OTF")));
+        assertTrue(ThemeFiles.fontFile("manrope.ttf"));
+    }
+
+    @Test public void otherFontPathsAreRefused() {
+        assertNull(ThemeFiles.path(Collections.singletonList("inter.ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "inter.ttc")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "inter.woff2")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "dusk.jpg")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "a..ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", ".ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "Inter[wght].ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "a b.ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("wallpapers", "inter.ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("fonts", "sub", "inter.ttf")));
+    }
+
+    @Test public void onlyTheBareFolderIsTheFonts() {
+        assertTrue(ThemeFiles.isFonts(Collections.singletonList("fonts")));
+        assertFalse(ThemeFiles.isFonts(Arrays.asList("fonts", "inter.ttf")));
+        assertFalse(ThemeFiles.isFonts(Collections.singletonList("wallpapers")));
+    }
 }

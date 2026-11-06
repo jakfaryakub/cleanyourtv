@@ -1,5 +1,5 @@
-# Windows version of theme.sh: push a theme folder (config.json, and optionally a wallpaper.jpg or a
-# wallpapers/ collection) to the launcher on the TV and restart Home. See themes/README.md for the keys.
+# Windows version of theme.sh: push a theme folder (config.json, and optionally a wallpaper.jpg, a
+# wallpapers/ collection or fonts/) to the launcher on the TV and restart Home. See themes/README.md for the keys.
 #
 # Usage: tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
 #        tools\theme.ps1 -TvHost 192.168.1.50 -Reset
@@ -82,10 +82,12 @@ function Drop($name) { "rm -f $dir/$name 2>/dev/null; content delete --uri $uri/
 # empty it too: the launcher's wallpaper picker lists that folder itself, and an on-TV pick of one of its
 # pictures is read back from it, so a reset that left the pictures behind still shows the theme it just removed.
 # Both paths use this one string (the same one theme.sh has).
+# The theme's fonts (config.json "font"), emptied on every push and -Reset, as in theme.sh.
+$clearFonts = "rm -f $dir/fonts/*.[tT][tT][fF] $dir/fonts/*.[oO][tT][fF] 2>/dev/null; content delete --uri $uri/fonts 2>/dev/null"
 $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][pP][eE][gG] $dir/wallpapers/*.[pP][nN][gG] $dir/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $uri/wallpapers 2>/dev/null"
 
 if ($Reset) {
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $clearFonts; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -124,6 +126,18 @@ if (Test-Path $wallpapers -PathType Container) {
         }
     }
 }
+# Font names, checked the same way; only .ttf and .otf are fonts the launcher loads.
+$fontDir = Join-Path $Theme 'fonts'
+$fonts = @()
+if (Test-Path $fontDir -PathType Container) {
+    $fonts = @(Get-ChildItem $fontDir -File | Where-Object { $_.Extension -match '^\.(ttf|otf)$' })
+    foreach ($font in $fonts) {
+        if ($font.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $font.Name.Contains('..') -or $font.Name.StartsWith('.')) {
+            [Console]::Error.WriteLine("unsupported font filename: $($font.Name) (letters, digits, '.', '_' and '-', with no '..' in the name). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
 
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
 Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
@@ -135,6 +149,11 @@ Invoke-Tv tv.py $clearWallpapers | Out-Null
 foreach ($image in $images) {
     Invoke-Tv b64push.py $image.FullName (Stage "wallpapers/$($image.Name)")
     Invoke-Tv tv.py (Put "wallpapers/$($image.Name)") | Out-Null
+}
+Invoke-Tv tv.py $clearFonts | Out-Null
+foreach ($font in $fonts) {
+    Invoke-Tv b64push.py $font.FullName (Stage "fonts/$($font.Name)")
+    Invoke-Tv tv.py (Put "fonts/$($font.Name)") | Out-Null
 }
 # The collection's names (wallpaper_captions); a theme without them leaves no stale names behind.
 $captions = Join-Path $Theme 'wallpapers\captions.txt'

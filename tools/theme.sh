@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push a theme (a folder with config.json, and optionally a wallpaper.jpg or a wallpapers/ collection) to the
+# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpapers/ collection or fonts/) to the
 # launcher on the TV and restart Home so it picks it up. The launcher reads the files from its external files
 # directory and overlays config.json on its built-in config.xml; see themes/README.md for the keys.
 #
@@ -110,10 +110,13 @@ del() { echo "rm -f $DIR/$1 2>/dev/null; content delete --uri $URI/$1 2>/dev/nul
 # empty it too: the launcher's wallpaper picker (LauncherSettingsActivity.showWallpaperPicker) lists that folder
 # itself, and an on-TV pick of one of its pictures is read back from it (WallpaperRotation.chosen), so a reset
 # that left the pictures behind still shows the theme it just removed. Both paths use this one string.
+# The theme's fonts (config.json "font"), emptied the same way on every push and --reset, so a theme without a font
+# leaves none behind for the next one to pick up by name.
+CLEAR_FONTS="rm -f $DIR/fonts/*.[tT][tT][fF] $DIR/fonts/*.[oO][tT][fF] 2>/dev/null; content delete --uri $URI/fonts 2>/dev/null"
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
 
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
   "$PY" -I theme_restart.py
   echo reset
   exit 0
@@ -167,6 +170,23 @@ if [ -d "$THEME/wallpapers" ]; then
     esac
   done
 fi
+# Font names, checked the same way and for the same reason; only .ttf and .otf are fonts the launcher loads.
+FONTS=""
+if [ -d "$THEME/fonts" ]; then
+  for FONT in "$THEME"/fonts/*; do
+    [ -f "$FONT" ] || continue
+    case "$FONT" in
+      *.[tT][tT][fF]|*.[oO][tT][fF])
+        NAME=$(basename "$FONT")
+        if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* || "$NAME" == .* ]]; then
+          echo "unsupported font filename: $NAME (letters, digits, '.', '_' and '-', with no '..' in the name)." \
+            "Nothing was sent to the TV." >&2
+          exit 2
+        fi
+        FONTS="$FONTS $NAME" ;;
+    esac
+  done
+fi
 
 tv "mkdir -p $DIR" >/dev/null 2>&1 || true
 tv --push "$THEME/config.json" "$TMP-config.json" >/dev/null
@@ -181,6 +201,11 @@ tv "$CLEAR_WALLPAPERS" >/dev/null
 for NAME in $NAMES; do
   "$PY" -I b64push.py "$THEME/wallpapers/$NAME" "$(stage "wallpapers/$NAME")"
   tv "$(put "wallpapers/$NAME")" >/dev/null
+done
+tv "$CLEAR_FONTS" >/dev/null
+for NAME in $FONTS; do
+  "$PY" -I b64push.py "$THEME/fonts/$NAME" "$(stage "fonts/$NAME")"
+  tv "$(put "fonts/$NAME")" >/dev/null
 done
 # The collection's names (wallpaper_captions); a theme without them leaves no stale names behind.
 if [ -f "$THEME/wallpapers/captions.txt" ]; then
