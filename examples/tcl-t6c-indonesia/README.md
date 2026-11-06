@@ -130,6 +130,16 @@ TV_HOST=<tv ip> tools/venv/bin/python -I tools/check.py examples/tcl-t6c-indones
     `docs/modules.md`.
 - **Wallpaper**: replace the 736×414 test image with a higher-resolution one, of 1920×1080 or more.
 
+## Theme font
+
+The theme draws Home in [Plus Jakarta Sans](theme/fonts/plus-jakarta-sans.ttf) (`"font"` in
+[theme/config.json](theme/config.json)), a variable font by Tokotype that covers the four weights the launcher
+uses. [Manrope](theme/fonts/manrope.ttf) and [Inter](theme/fonts/inter.ttf) sit beside it to try instead. All
+three are SIL Open Font License 1.1 fonts, each with its licence next to it
+([plus-jakarta-sans.OFL.txt](theme/fonts/plus-jakarta-sans.OFL.txt), [manrope.OFL.txt](theme/fonts/manrope.OFL.txt),
+[inter.OFL.txt](theme/fonts/inter.OFL.txt)), taken from `google/fonts`. The files were renamed from the Google
+Fonts names (`PlusJakartaSans[wght].ttf` and so on), whose brackets `tools/theme.sh` does not push.
+
 ## Performance baseline
 
 [docs/baseline/2026-11-07.md](../../docs/baseline/2026-11-07.md) has memory, CPU and frame numbers for

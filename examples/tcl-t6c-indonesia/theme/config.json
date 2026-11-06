@@ -23,5 +23,6 @@
   ],
   "app_library": true,
   "tile_menu": true,
-  "ambient_glow": false
+  "ambient_glow": false,
+  "font": "plus-jakarta-sans.ttf"
 }
