@@ -23,14 +23,25 @@ final class LauncherLocale {
         return Locale.forLanguageTag(tag.trim());
     }
 
-    /** base with the configured language, or base itself when locale is off. */
+    /**
+     * base with the configured language and font_scale, or base itself when both are off. font_scale multiplies the
+     * TV's own fontScale, so every sp size follows, the ones set in code included; dp sizes do not move.
+     *
+     * Both are read once, when an activity is created. A theme chosen on the TV with the remote (Fase 3 in
+     * docs/PLAN.md) must recreate() the activities it changes, or a new scale or language shows only after the next
+     * restart of Home.
+     */
     static Context wrap(Context base) {
-        Locale locale = parse(Config.load(base).locale);
-        if (locale == null) return base;
-        // Formatters that take no Context (the clock's date, the lunar line) follow the default locale.
-        Locale.setDefault(locale);
+        Config cfg = Config.load(base);
+        Locale locale = parse(cfg.locale);
+        if (locale == null && cfg.fontScale == 1f) return base;
         Configuration c = new Configuration(base.getResources().getConfiguration());
-        c.setLocale(locale);
+        if (locale != null) {
+            // Formatters that take no Context (the clock's date, the lunar line) follow the default locale.
+            Locale.setDefault(locale);
+            c.setLocale(locale);
+        }
+        if (cfg.fontScale != 1f) c.fontScale *= cfg.fontScale;
         return base.createConfigurationContext(c);
     }
 }

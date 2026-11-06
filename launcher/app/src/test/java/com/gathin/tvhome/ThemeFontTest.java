@@ -32,6 +32,19 @@ public class ThemeFontTest {
         assertEquals("", Config.fontName("inter.woff2"));
     }
 
+    @Test public void fontScaleTakesOnlyTheRange() {
+        assertEquals(1.15f, Config.fontScale(1.15, 1f), 0f);
+        assertEquals(0.85f, Config.fontScale(0.85, 1f), 1e-6f);
+        assertEquals(1.25f, Config.fontScale(1.25, 1f), 0f);
+        assertEquals(1f, Config.fontScale(1.3, 1f), 0f);
+        assertEquals(1f, Config.fontScale(0.5, 1f), 0f);
+        assertEquals(1f, Config.fontScale(-1, 1f), 0f);
+        assertEquals(1f, Config.fontScale("1.2", 1f), 0f);
+        assertEquals(1f, Config.fontScale(null, 1f), 0f);
+        assertEquals(1f, Config.fontScale(Boolean.TRUE, 1f), 0f);
+        assertEquals(1.1f, Config.fontScale(1.1f, 1f), 0f);
+    }
+
     @Test public void aVariableFontGivesItsWeightRange() throws IOException {
         assertArrayEquals(new int[] {200, 800}, range(font(0x00010000, "wght", 200, 400, 800)));
         assertArrayEquals(new int[] {100, 900}, range(font(0x4F54544F, "wght", 100, 400, 900)));

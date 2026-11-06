@@ -277,6 +277,8 @@ final class Config {
     final boolean clockGlow;
     /** A font file in the theme's fonts/ folder (config.json font), or "" for the bundled Outfit. */
     final String font;
+    /** Multiplies every sp text size (config.json font_scale, 0.85-1.25); 1 leaves the sizes as they are. */
+    final float fontScale;
     /** Every app in the dock's row, which scrolls sideways, and no grid below it (config.xml, single_row); needs dock_row. */
     final boolean singleRow;
     /** With single_row, the band runs behind every app in the row, not only the dock apps (config.xml, dock_band_all). */
@@ -297,8 +299,9 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   String font) {
+                   String font, float fontScale) {
         this.font = font;
+        this.fontScale = fontScale;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -546,6 +549,7 @@ final class Config {
         boolean singleRow = res.getBoolean(R.bool.single_row);
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
         String font = "";
+        float fontScale = 1f;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -663,6 +667,7 @@ final class Config {
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
             font = fontName(string(json, "font", font));
+            fontScale = fontScale(json.opt("font_scale"), fontScale);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -727,12 +732,19 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font);
+                font, fontScale);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
     static String fontName(String name) {
         return name != null && ThemeFiles.fontFile(name) ? name : "";
+    }
+
+    /** font_scale between 0.85 and 1.25; anything else, or a value that is not a number, keeps the fallback. */
+    static float fontScale(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 0.85f && f <= 1.25f ? f : fallback;
     }
 
     /**
