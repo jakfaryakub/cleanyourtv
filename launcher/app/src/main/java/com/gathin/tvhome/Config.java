@@ -39,6 +39,13 @@ final class Config {
     private static final String TAG = "TvHome.Config";
     static final String FILE_NAME = "config.json";
     static final String WALLPAPER_NAME = "wallpaper.jpg";
+
+    /** The theme's wallpaper.webp when wallpaper_animated is on and the file is there; null otherwise. */
+    static File animatedWallpaper(File dir, boolean on) {
+        if (!on || dir == null) return null;
+        File file = new File(dir, AnimatedWallpaper.FILE_NAME);
+        return file.isFile() && file.length() > 0 ? file : null;
+    }
     static final String SETTINGS_NAME = "launcher_settings";
     static final String ROWS_BELOW_DOCK_KEY = "rows_below_dock";
     static final String WALLPAPER_CHOICE_KEY = "wallpaper_choice";
@@ -286,6 +293,8 @@ final class Config {
     final boolean rowWrap;
     /** Down from Home's last row opens the App library (config.json down_opens_library); needs app_library. */
     final boolean downOpensLibrary;
+    /** config.json wallpaper_animated: the theme's wallpaper.webp, played over wallpaper.jpg; null when off. */
+    final File wallpaperAnimated;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -335,8 +344,9 @@ final class Config {
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
                    double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
-                   int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary) {
+                   int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary, File wallpaperAnimated) {
         this.font = font;
+        this.wallpaperAnimated = wallpaperAnimated;
         this.rowWrap = rowWrap;
         this.downOpensLibrary = downOpensLibrary;
         this.rowsAutohideSeconds = rowsAutohideSeconds;
@@ -618,6 +628,7 @@ final class Config {
         int rowsAutohideSeconds = 0;
         boolean rowWrap = false;
         boolean downOpensLibrary = false;
+        boolean wallpaperAnimatedOn = false;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -752,6 +763,7 @@ final class Config {
             rowsAutohideSeconds = integer(json, "rows_autohide_seconds", rowsAutohideSeconds, 0, 3600);
             rowWrap = bool(json, "row_wrap", rowWrap);
             downOpensLibrary = bool(json, "down_opens_library", downOpensLibrary);
+            wallpaperAnimatedOn = bool(json, "wallpaper_animated", wallpaperAnimatedOn);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -818,7 +830,8 @@ final class Config {
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
                 font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
                 headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
-                topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library);
+                topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library,
+                animatedWallpaper(dir, wallpaperAnimatedOn && wallpaperEnabled));
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */

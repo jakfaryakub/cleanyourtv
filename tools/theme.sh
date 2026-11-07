@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpapers/ collection, fonts/ or icons/) to the
-# launcher on the TV and restart Home so it picks it up. The launcher reads the files from its external files
-# directory and overlays config.json on its built-in config.xml; see themes/README.md for the keys.
+# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpaper.webp, a wallpapers/ collection,
+# fonts/ or icons/) to the launcher on the TV and restart Home so it picks it up. The launcher reads the files from
+# its external files directory and overlays config.json on its built-in config.xml; see themes/README.md for the keys.
 #
 # Usage: TV_HOST=192.168.1.50 tools/theme.sh themes/aurora
 #        TV_HOST=192.168.1.50 tools/theme.sh --reset        # remove the overlay, back to config.xml
@@ -119,7 +119,7 @@ CLEAR_ICONS="rm -f $DIR/icons/*.[pP][nN][gG] 2>/dev/null; content delete --uri $
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
 
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; $CLEAR_ICONS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpaper.webp); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; $CLEAR_ICONS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
   "$PY" -I theme_restart.py
   echo reset
   exit 0
@@ -220,6 +220,13 @@ if [ -f "$THEME/wallpaper.jpg" ]; then
   tv "$(put wallpaper.jpg)"
 else
   tv "$(del wallpaper.jpg)" >/dev/null
+fi
+# wallpaper_animated's file, a theme's wallpaper.webp next to its wallpaper.jpg (themes/README.md).
+if [ -f "$THEME/wallpaper.webp" ]; then
+  "$PY" -I b64push.py "$THEME/wallpaper.webp" "$TMP-wallpaper.webp"
+  tv "$(put wallpaper.webp)"
+else
+  tv "$(del wallpaper.webp)" >/dev/null
 fi
 tv "$CLEAR_WALLPAPERS" >/dev/null
 for NAME in $NAMES; do
