@@ -61,6 +61,40 @@ final class Prayer {
         return SUBUH;
     }
 
+    /** What the header's line shows at one moment: a day's times, the one in bold, and whether that day is tomorrow. */
+    static final class Line {
+        final LocalDate day;
+        final int[] times;
+        final int next;
+        final boolean tomorrow;
+
+        Line(LocalDate day, int[] times, int next, boolean tomorrow) {
+            this.day = day;
+            this.times = times;
+            this.next = next;
+            this.tomorrow = tomorrow;
+        }
+
+        /** The minute of the day the line must be drawn again: the next prayer's, or midnight for tomorrow's line. */
+        int changesAt() {
+            return tomorrow ? 24 * 60 : times[next];
+        }
+    }
+
+    /**
+     * The line at this minute of today: today's times with the next one marked, or, once Isha has passed, tomorrow's
+     * with Fajr marked, so the bold time is always still to come.
+     */
+    static Line line(LocalDate today, int nowMinute, double latitude, double longitude, ZoneId zone, int ihtiyat) {
+        int[] times = times(today, latitude, longitude, zone, ihtiyat);
+        if (!allPassed(times, nowMinute)) return new Line(today, times, next(times, nowMinute), false);
+        LocalDate tomorrow = today.plusDays(1);
+        int[] next = times(tomorrow, latitude, longitude, zone, ihtiyat);
+        int first = SUBUH;
+        while (first < COUNT - 1 && next[first] == NONE) first++;
+        return new Line(tomorrow, next, first, true);
+    }
+
     /** True when no time of the day is still to come at this minute: the line should show tomorrow. */
     static boolean allPassed(int[] times, int nowMinute) {
         for (int t : times) {

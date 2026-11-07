@@ -92,6 +92,34 @@ public class PrayerTest {
         assertEquals(false, Prayer.allPassed(t, 0));
     }
 
+    @Test public void theLineIsTodayUntilIshaThenTomorrow() {
+        LocalDate nov7 = LocalDate.of(2026, 11, 7);
+        int[] today = Prayer.times(nov7, LAT, LON, WIB, 2);
+        Prayer.Line evening = Prayer.line(nov7, today[Prayer.ISYA] - 1, LAT, LON, WIB, 2);
+        assertEquals(nov7, evening.day);
+        assertEquals(false, evening.tomorrow);
+        assertEquals(Prayer.ISYA, evening.next);
+        assertEquals(today[Prayer.ISYA], evening.changesAt());
+
+        Prayer.Line night = Prayer.line(nov7, today[Prayer.ISYA], LAT, LON, WIB, 2);
+        assertEquals(nov7.plusDays(1), night.day);
+        assertTrue(night.tomorrow);
+        assertEquals(Prayer.SUBUH, night.next);
+        assertEquals(24 * 60, night.changesAt());   // redrawn at midnight, as today's line again
+        assertEquals(Prayer.times(nov7.plusDays(1), LAT, LON, WIB, 2)[Prayer.SUBUH], night.times[Prayer.SUBUH]);
+
+        Prayer.Line afterMidnight = Prayer.line(nov7.plusDays(1), 0, LAT, LON, WIB, 2);
+        assertEquals(nov7.plusDays(1), afterMidnight.day);
+        assertEquals(false, afterMidnight.tomorrow);
+        assertEquals(Prayer.SUBUH, afterMidnight.next);
+    }
+
+    @Test public void theLastNightOfTheYearShowsNewYearsDay() {
+        Prayer.Line line = Prayer.line(LocalDate.of(2026, 12, 31), 23 * 60 + 59, LAT, LON, WIB, 2);
+        assertEquals(LocalDate.of(2027, 1, 1), line.day);
+        assertTrue(line.tomorrow);
+    }
+
     @Test public void aTimeTheSunNeverReachesIsNoneAndSkipped() {
         // Oslo in June: the sun never sinks 18 degrees below the horizon, so there is no Isya (nor Subuh).
         int[] oslo = Prayer.times(LocalDate.of(2026, 6, 21), 59.91, 10.75, ZoneId.of("Europe/Oslo"), 2);

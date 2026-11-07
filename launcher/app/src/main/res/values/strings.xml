@@ -159,6 +159,8 @@
     <string name="clock_format_12">12-hour</string>
     <string name="clock_format_24">24-hour</string>
     <!-- prayer_times: the five daily prayers, in Prayer's order (Kemenag's Subuh, Dzuhur, Ashar, Maghrib, Isya). -->
+    <!-- Before the prayer line once Isha has passed and it shows the next day's times. -->
+    <string name="prayer_tomorrow" translatable="false">Tomorrow</string>
     <string-array name="prayer_names" translatable="false">
         <item>Fajr</item>
         <item>Dhuhr</item>

@@ -2631,30 +2631,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         handler.removeCallbacks(prayerTick);
         LocalTime now = LocalTime.now();
         int minute = now.getHour() * 60 + now.getMinute();
-        LocalDate today = LocalDate.now();
-        ZoneId zone = ZoneId.systemDefault();
-        int[] times = Prayer.times(today, prayerLat, prayerLon, zone, prayerIhtiyat);
-        LocalDate shown = today;
-        // Once Isya has passed the line shows tomorrow, so the bold Subuh is the one still to come.
-        if (Prayer.allPassed(times, minute)) {
-            shown = today.plusDays(1);
-            times = Prayer.times(shown, prayerLat, prayerLon, zone, prayerIhtiyat);
+        Prayer.Line line = Prayer.line(LocalDate.now(), minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
+        if (line.next != prayerNext || !line.day.equals(prayerDay)) {
+            prayerNext = line.next;
+            prayerDay = line.day;
+            prayerLine.setText(prayerText(line));
         }
-        int next = shown.equals(today) ? Prayer.next(times, minute) : Prayer.SUBUH;
-        if (next != prayerNext || !shown.equals(prayerDay)) {
-            prayerNext = next;
-            prayerDay = shown;
-            prayerLine.setText(prayerText(times, next));
-        }
-        // The next change: that prayer's minute today, or midnight once tomorrow's line is up.
-        int target = shown.equals(today) ? times[next] : 24 * 60;
-        long delay = ((target - minute) * 60L - now.getSecond()) * 1000L + 500;
+        long delay = ((line.changesAt() - minute) * 60L - now.getSecond()) * 1000L + 500;
         handler.postDelayed(prayerTick, Math.max(1000L, delay));
     }
 
-    private CharSequence prayerText(int[] times, int next) {
+    private CharSequence prayerText(Prayer.Line line) {
+        int[] times = line.times;
+        int next = line.next;
         String[] names = getResources().getStringArray(R.array.prayer_names);
         SpannableStringBuilder text = new SpannableStringBuilder();
+        if (line.tomorrow) {
+            // A small dim label, so the morning's times are not read as tonight's.
+            text.append(getString(R.string.prayer_tomorrow));
+            text.setSpan(new android.text.style.RelativeSizeSpan(0.8f), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setSpan(new ForegroundColorSpan(0x80FFFFFF), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
         for (int i = 0; i < Prayer.COUNT; i++) {
             if (times[i] == Prayer.NONE) continue;
             if (text.length() > 0) text.append("\u2003");
