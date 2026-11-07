@@ -61,7 +61,10 @@ final class Prayer {
         return SUBUH;
     }
 
-    /** What the header's line shows at one moment: a day's times, the one in bold, and whether that day is tomorrow. */
+    /**
+     * What the header's line shows at one moment: a day's times, the one in bold, and whether that day is tomorrow
+     * (which only moves the next redraw to midnight; the line itself has no label for it).
+     */
     static final class Line {
         final LocalDate day;
         final int[] times;

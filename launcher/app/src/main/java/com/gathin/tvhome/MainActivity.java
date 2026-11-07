@@ -2680,12 +2680,6 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int next = line.next;
         String[] names = getResources().getStringArray(R.array.prayer_names);
         SpannableStringBuilder text = new SpannableStringBuilder();
-        if (line.tomorrow) {
-            // A small dim label, so the morning's times are not read as tonight's.
-            text.append(getString(R.string.prayer_tomorrow));
-            text.setSpan(new android.text.style.RelativeSizeSpan(0.8f), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            text.setSpan(new ForegroundColorSpan(0x80FFFFFF), 0, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-        }
         for (int i = 0; i < Prayer.COUNT; i++) {
             if (times[i] == Prayer.NONE) continue;
             if (text.length() > 0) text.append("\u2003\u2003");

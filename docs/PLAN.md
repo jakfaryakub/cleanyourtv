@@ -100,8 +100,8 @@ The unrounded times sat 1.39 minutes early to 0.18 late, so any margin from 24 t
 | Maghrib | 0 | 141 | 131 |
 | Isha | 0 | 128 | 144 |
 
-Names are in English (Fajr, Dhuhr, Asr, Maghrib, Isha). After Isha the line shows tomorrow's times behind a small
-"Tomorrow". The date at the top right lost both ends after a cold boot (its lines kept `match_parent` in a column
+Names are in English (Fajr, Dhuhr, Asr, Maghrib, Isha). After Isha the line shows tomorrow's times, with Fajr
+in bold (a small "Tomorrow" label was tried and dropped). The date at the top right lost both ends after a cold boot (its lines kept `match_parent` in a column
 that wraps); fixed, and the longest English date, "WEDNESDAY 30 SEPTEMBER", needs about 356 of the 1,151 px it has
 at `clock_size` 40.
 
