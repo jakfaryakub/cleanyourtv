@@ -18,7 +18,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
-| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | next |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | next (surveyed, see below) |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
 
 ## Phase 1b.1 result
@@ -240,6 +240,59 @@ Where the code changes go:
   `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts), the experiment's keys merged into its
   `config.json`, and the local `icons/`. Rebuild the copy whenever the repo theme changes; `theme.sh` sends `icons/`
   once 1b.1 adds it.
+
+## Phase 4a survey
+
+Read-only survey on 2026-11-07, no build and no TV. Nothing is written yet.
+
+**Where it goes in `WallpaperPlayer`.**
+
+- `AnimatedImageDrawable` and `ImageDecoder` need API 28 and the launcher's `minSdk` is 26, so everything sits
+  behind `Build.VERSION.SDK_INT >= 28`; below that the JPG stays.
+- `Config` (next to `WALLPAPER_NAME`): `wallpaperAnimated`, a `File` from the key. It is null when the key is unset,
+  the file is missing or empty, `wallpaper` is false, `reduced_motion` is on, or the SDK is below 28.
+- Constructor: `showFirst()` still decodes the JPG on the main thread, so Home's first frame is the JPG, as
+  placeholder and fallback both. Then the existing `decoder` executor runs `ImageDecoder.decodeDrawable` with a
+  header listener: `setTargetSize` down to the limit, refuse anything over 1920×1080,
+  `setMemorySizePolicy(MEMORY_POLICY_LOW_RAM)`. On the main thread: dropped if `closed`; a still WebP keeps the
+  JPG; otherwise `setRepeatCount(REPEAT_INFINITE)`, `image.setImageDrawable`, and the JPG in `current` is
+  recycled 500 ms later, as `show()` does.
+- `update()` returns early while the animation is on: it replaces rotation and moods.
+- Pause and resume: `start()` (Home's `onStart`) calls `anim.start()`, `stop()` (`onStop`) calls `anim.stop()`,
+  `close()` stops it and drops the drawable.
+- `reduced_motion`: nothing is decoded, the JPG stays. That costs no memory, unlike a paused first frame.
+- `releaseForMemoryPressure()` stops it, clears the drawable and sets `anim` to null; the next `start()` shows
+  the JPG through `showFirst()` and decodes the animation again.
+- Fallback to the JPG on any exception or `OutOfMemoryError`, a refused size, SDK below 28 or reduced motion,
+  with a `TvHome.Wallpaper` warning. A theme with no `wallpaper.jpg` shows its background colour until the
+  animation is ready.
+- `wallpaper_dim` cannot be painted into the frames: `anim.setColorFilter` with a `PorterDuffColorFilter` in
+  `SRC_ATOP`.
+- The clock screensaver (`ClockScene`) keeps the still JPG.
+
+**Key and file limits.**
+
+- `wallpaper_animated`: a file name in the theme folder, for example `"wallpaper.webp"`. Unset, Home is
+  unchanged. No key for fps; `reduced_motion` already exists.
+- The file: lossy animated WebP, at most 960×540 (bigger is scaled down while decoding, over 1920×1080 is
+  refused), at most 20 fps (frames of 50 ms or longer), a loop of at most 10 s, at most 3 MB. `ImageDecoder`
+  cannot cap fps or loop length, so the theme tool checks those offline with Pillow; the app enforces size and
+  resolution only.
+- Memory estimate: two 960×540 ARGB buffers, about 4.1 MB, less the released JPG (about 4 MB in RGB_565).
+
+**Measurement and pass limits.** A/B/A after a clean boot, the experiment theme without (A) and with (B)
+`wallpaper_animated`, each run 90 s after its push:
+
+- `tools/bench-home.sh`: PSS after warm-up and after keys, frame and GPU p50/p90, janky frames.
+- Idle CPU: 60 s on Home with no keys, `top -b -d 10 -n 6 -p <launcher pid>`, the average %CPU.
+- Idle frames: reset gfxinfo, 30 s with no keys, read gfxinfo (the animation draws on its own).
+- The stop works: open another app, the launcher's CPU is about 0 within 10 s; back on Home it plays again.
+- MemAvailable and SwapFree before and after, as in the 1b tables.
+
+B passes against A when: PSS rises at most 8 MB; D-pad janky frames rise at most 2 pp; frame p90 stays at or
+under 16 ms and GPU p90 rises at most 3 ms; idle CPU is at most 20% of one core; idle janky frames at most 5%;
+CPU 0% after the stop; MemAvailable drops at most 20 MB. If one fails, try 640×360 at 15 fps once; if that fails
+too, 4a closes and 4b is decided.
 
 ## Phase 4 measurements to start from
 
