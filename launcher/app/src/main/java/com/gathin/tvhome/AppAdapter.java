@@ -227,7 +227,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean logoTiles;
     /** focus_scale from the theme, or 0 for the built-in zoom. */
     private final float themeScale;
-    /** unfocused_opacity: the opacity of a bare tile's logo or wordmark while it is not focused. */
+    /** unfocused_opacity: with tile_style logo, the opacity of a tile's logo, wordmark or card art while not focused. */
     private final float restOpacity;
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
@@ -518,6 +518,12 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         Bitmap logo = e.logo != null ? logoFor(e.logo, h) : null;
         // tile_style logo: an app tile has no card. A module card stays a card: its banner is the card.
         boolean bare = logoTiles && e.kind != Entry.CARD;
+        // Every tile in a logo row dims, a module card's art included, so the row reads as one.
+        h.dimmed = logoTiles;
+        float alpha = contentAlpha(h.card.isFocused(), h.dimmed, restOpacity);
+        h.banner.setAlpha(alpha);
+        h.icon.setAlpha(alpha);
+        h.label.setAlpha(alpha);
         setBare(h, bare);
         if (bare) {
             bindBare(h, e, logo);
@@ -756,9 +762,13 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Share of the tile's height a wordmark's text takes (tile_style logo, an app with no logo). */
     static final float WORDMARK_SHARE = 0.22f;
 
-    /** A tile's logo or wordmark opacity: dimmed to unfocused_opacity on a bare tile that is not focused. */
-    static float contentAlpha(boolean focused, boolean bare, float restOpacity) {
-        return bare && !focused ? restOpacity : 1f;
+    /**
+     * The opacity of a tile's logo, wordmark or card art: unfocused_opacity on a tile in a logo row that is not
+     * focused. Only the art views take it, never the card: an ImageView or TextView with no background draws its
+     * alpha directly, where a card with children would need an offscreen layer.
+     */
+    static float contentAlpha(boolean focused, boolean dimmed, float restOpacity) {
+        return dimmed && !focused ? restOpacity : 1f;
     }
 
     static float wordmarkTextPx(int tileH) {
@@ -769,10 +779,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * tile_style logo: no card fill and no rounded outline, which would draw a shadow and clip the zoomed logo. A
      * recycled view that held a module card gets them back.
      */
-    private void setBare(Holder h, boolean bare) {
-        float a = contentAlpha(h.card.isFocused(), bare, restOpacity);
-        h.banner.setAlpha(a);
-        h.label.setAlpha(a);
+    private static void setBare(Holder h, boolean bare) {
         if (bare == h.bare) return;
         h.bare = bare;
         h.card.setOutlineProvider(bare ? null : h.tileOutline);
@@ -1053,6 +1060,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final ViewOutlineProvider tileOutline;
         /** tile_style logo: this tile is drawn with no card. */
         boolean bare;
+        /** tile_style logo: this tile's art dims to unfocused_opacity while it is not focused. */
+        boolean dimmed;
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
                boolean reducedMotion, float restNameAlpha, boolean overshoot, float zoom, float restOpacity) {
@@ -1091,18 +1100,20 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             card.setOnFocusChangeListener((view, focused) -> {
                 view.animate().cancel();
                 banner.animate().cancel();
+                icon.animate().cancel();
                 label.animate().cancel();
                 name.animate().cancel();
                 float s = focused ? zoom : 1f;
-                // tile_style logo: the logo or wordmark itself carries the opacity, never the card, so no layer is
-                // needed (an ImageView or TextView with no background draws its alpha directly).
-                if (bare && restOpacity < 1f) {
+                // tile_style logo: the art views carry the opacity, never the card (see contentAlpha).
+                if (dimmed && restOpacity < 1f) {
                     float a = contentAlpha(focused, true, restOpacity);
                     if (!animations || reducedMotion) {
                         banner.setAlpha(a);
+                        icon.setAlpha(a);
                         label.setAlpha(a);
                     } else {
                         banner.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                        icon.animate().alpha(a).setDuration(focused ? 180 : 220).start();
                         label.animate().alpha(a).setDuration(focused ? 180 : 220).start();
                     }
                 }

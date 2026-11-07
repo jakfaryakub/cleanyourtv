@@ -18,10 +18,10 @@ public class UnfocusedOpacityTest {
         assertEquals(1f, Config.unfocusedOpacity(null, 1f), 0f);
     }
 
-    @Test public void onlyABareTileThatIsNotFocusedIsDimmed() {
+    @Test public void onlyATileInALogoRowThatIsNotFocusedIsDimmed() {
         assertEquals(0.5f, AppAdapter.contentAlpha(false, true, 0.5f), 0f);
         assertEquals(1f, AppAdapter.contentAlpha(true, true, 0.5f), 0f);
-        assertEquals(1f, AppAdapter.contentAlpha(false, false, 0.5f), 0f);   // a card is never dimmed
+        assertEquals(1f, AppAdapter.contentAlpha(false, false, 0.5f), 0f);   // tile_style card never dims
         assertEquals(1f, AppAdapter.contentAlpha(false, true, 1f), 0f);
     }
 }
