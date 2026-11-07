@@ -10,12 +10,12 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 |---|---|---|
 | 0 | APK size gate 640 KB for this fork, performance baseline | done |
 | 1a | Theme font: `font` (a `.ttf`/`.otf` in the theme's `fonts/`) and `font_scale` (0.85-1.25) | done |
-| 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | not started |
+| 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | done |
 | 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done |
 | 1b.2 | Logo tiles with no card, focus by scale and opacity: `tile_style: "logo"`, `focus_frame: false`, `focus_scale`, `unfocused_opacity` | done |
-| 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started |
-| 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | not started |
-| 1b.5 | Minimal header: small clock and date top right, clock size as a key (`header_position`, `clock_size`); low priority | not started |
+| 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | done (by hand, see below) |
+| 1b.5 | Minimal header top right (`header_position`, `clock_size`) with today's five prayer times under it (`prayer_times`), computed offline | planned, next |
+| 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started, after 1b.5 |
 | 2 | Tile size, gaps and label size as theme keys | not started |
 | 3 | Theme picker on the TV, with the remote | not started |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | not started |
@@ -70,6 +70,61 @@ run 90 s after its push:
 | Janky frames | 0.00% | 0.00% | 0.00% |
 
 The logo row draws as fast as the cards, and its PSS is about 1 MB lower (no glass, no card fills).
+
+## Phase 1b.5 plan: minimal header and prayer times
+
+Done before 1b.3, because hiding the row while idle leaves the header as the only thing on the wallpaper.
+
+**Keys** (all off or unchanged when unset):
+
+| Key | Values | What |
+|---|---|---|
+| `header_position` | `start` (default) or `end` | `end` puts the clock and date top right, the Wi-Fi and Settings buttons beside them on the right edge |
+| `clock_size` | 24 to 72 (sp) | The clock's text size; unset keeps 52 sp. The date follows at a fixed ratio |
+| `prayer_times` | bool, `false` by default | One line of the five times (Subuh, Dzuhur, Ashar, Maghrib, Isya) under the date; the next one bold |
+| `latitude`, `longitude` | degrees | The place for `prayer_times` (and, when set in a theme, for `wallpaper_moods`, which today read config.xml only) |
+| `prayer_ihtiyat` | 0 to 5 minutes, default 2 | Kemenag's safety margin, added before rounding up |
+
+**Calculation** (new `Prayer.java`, pure maths beside `Sun.java`, no network):
+
+- The sun's declination and equation of time from Meeus' low-precision formulas, evaluated at the time of each event
+  and iterated twice. `Sun.java`'s day-of-year series is 1-2 minutes off for Dzuhur and Maghrib.
+- Kemenag parameters: Subuh at the sun 20° below the horizon, Isya 18°, Ashar when a shadow is its object's length
+  plus the noon shadow (Shafi'i), Maghrib at −1.0° (refraction, semi-diameter and the horizon's dip), Dzuhur at the
+  sun's transit plus 3 minutes, the others plus `prayer_ihtiyat`, each rounded up to the minute.
+- A check in a scratch script against six dates of 2026 (1 Jan, 20 Mar, 21 Jun, 1 Aug, 23 Sep, 21 Dec) at
+  −6.1754, 106.8272 matched all 30 times to the minute. The reference was api.myquran.com (`/v2/sholat/jadwal/1301/…`),
+  a secondary source; the parameters were chosen from 36 combinations against it, so the official table decides.
+
+**Golden test** (`PrayerTest`, JVM): the same six dates and five times, tolerance 1 minute, from the official Kemenag
+table at https://bimasislam.kemenag.go.id/jadwalshalat (DKI Jakarta, Kota Jakarta Pusat; Bimas Islam, data from
+SIHAT Kemenag RI). The page is a form, so the table has to be read from it in a browser and copied into the test with
+its date of reading; the myquran numbers stand in until then. Plus edge tests: a latitude where Isya never comes
+(above about 48° in June) shows no Isya instead of a wrong time, and the next prayer after Isya is tomorrow's Subuh.
+
+**Layout** (`MainActivity`, the header's `RelativeLayout`):
+
+- `header_position: end`: `leftBlock` aligns right, before `topButtons`; the date sits left of the clock on one
+  line (as in the mock-up), and the prayer line goes under both, right-aligned. The Hebrew `rtl_menu_bar` mode
+  already right-aligns the date and clock rows (`moveDateBelowClock`), which is the code to follow.
+- The buttons stay on the right edge (mock-up A), drawn smaller with the header (`icon_only_buttons`). Moving them
+  left (mock-up B) would put them far from the clock they belong with, and the D-pad Up path from the row lands on
+  the right half of the screen either way.
+- The prayer line is one `TextView` with a bold span on the next prayer, in the theme font. Refreshed from the
+  existing `minuteTick` only when the minute passes a prayer or midnight, so no timer, service or alarm is added.
+
+**Cost** (estimates, to measure): under 50 KB of memory (one TextView and one string a day); GPU work is one line of
+text redrawn at most once a minute, nothing per frame. A/B with `tools/bench-home.sh` after a clean boot, the theme
+without and with the three keys; limits PSS +8 MB and janky ±2 pp.
+
+**Screenshots** for `docs/switches.md`: `header_position`, `clock_size` and `prayer_times` from the TV.
+
+## Phase 1b.4, how the combined theme is built
+
+`work/theme-ref/` is a copy of `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts) with the experiment's
+keys merged into `config.json`, plus `icons/` from `tools/logo.py` and the logo sources in `logo-src/` (with
+`SOURCES.md`). `work/` is ignored by git, so no logo is committed; `tools/theme.sh` sends `icons/` and ignores
+`logo-src/`. Rebuild the copy when the repo theme changes.
 
 ## Phase 1b target
 
