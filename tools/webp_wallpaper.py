@@ -3,14 +3,17 @@
 
 Usage:
     tools/webp_wallpaper.py <video|gif> <out.webp> [--start 0] [--seconds 8] [--fps 15] [--width 960]
-                            [--height 540] [--quality 70]
+                            [--height 540] [--quality 70] [--keyframe 5]
     tools/webp_wallpaper.py --check <file.webp>
 
     tools/webp_wallpaper.py clip.mp4 work/theme-ref/wallpaper.webp --start 3 --seconds 6
     tools/webp_wallpaper.py --check work/theme-ref/wallpaper.webp
 
 The clip is cut at --start for --seconds, resampled to --fps, scaled to cover --width x --height and cropped to it,
-then encoded as a lossy animated WebP that loops forever (ffmpeg's libwebp_anim). The result is checked against
+then encoded as a lossy animated WebP that loops forever: ffmpeg writes the frames as PNG and libwebp's img2webp
+encodes them (ffmpeg's own libwebp_anim left stale 16 px blocks on a smooth gradient), with a key frame at least every
+--keyframe frames: lossy frames built on the one before drift, and without that a gradient test clip came out
+blocky (mean error 15 against the source, 1.3 with --keyframe 5, at no larger size). The result is checked against
 the limits the launcher's Phase 4a survey set, and so is any file given to --check:
 
     at most 960x540, at most 20 fps (no frame shorter than 50 ms), a loop of at most 10 s, at most 3 MB.
@@ -19,17 +22,18 @@ The launcher itself refuses only a file over 3 MB or over 1920x1080 (AnimatedWal
 length cost CPU on every frame, and only this check sees them. Keep a still wallpaper.jpg beside it: Home shows
 that first, and whenever the animation does not play.
 
-Needs ffmpeg with libwebp (`brew install ffmpeg`, `apt install ffmpeg`) to convert; --check needs nothing.
+Needs ffmpeg and img2webp (`brew install ffmpeg webp`, `apt install ffmpeg webp`) to convert; --check needs nothing.
 
 Exit status: 0 the file was written and is within the limits; 1 ffmpeg failed, or the file breaks a limit (each one
-is named); 2 nothing was done (a bad option, an input that is not a file, an output not named .webp, no ffmpeg with
-libwebp_anim on PATH, or a --check file that is not an animated WebP).
+is named); 2 nothing was done (a bad option, an input that is not a file, an output not named .webp, no ffmpeg or
+img2webp on PATH, or a --check file that is not an animated WebP).
 """
 import argparse
 import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 MAX_WIDTH, MAX_HEIGHT = 960, 540
@@ -95,11 +99,6 @@ def check(path):
     return 1 if found else 0
 
 
-def has_libwebp_anim(ffmpeg):
-    result = subprocess.run([ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True)
-    return "libwebp_anim" in result.stdout
-
-
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Make or check a theme's animated wallpaper.webp.")
     parser.add_argument("paths", nargs="+", metavar="input output | file")
@@ -110,6 +109,7 @@ def main(argv=None):
     parser.add_argument("--width", type=int, default=MAX_WIDTH, help=f"at most {MAX_WIDTH} (default {MAX_WIDTH})")
     parser.add_argument("--height", type=int, default=MAX_HEIGHT, help=f"at most {MAX_HEIGHT} (default {MAX_HEIGHT})")
     parser.add_argument("--quality", type=int, default=70, help="lossy quality 1-100 (default 70)")
+    parser.add_argument("--keyframe", type=int, default=5, help="a key frame at least every N frames, 1-30 (default 5)")
     args = parser.parse_args(argv)
 
     if args.check:
@@ -129,28 +129,38 @@ def main(argv=None):
         print(f"{out}: the output is a .webp (a theme's wallpaper.webp). Nothing was done.", file=sys.stderr)
         return 2
     if not (1 <= args.fps <= MAX_FPS and 0 < args.seconds <= MAX_LOOP_MS / 1000 and args.start >= 0
-            and 0 < args.width <= MAX_WIDTH and 0 < args.height <= MAX_HEIGHT and 1 <= args.quality <= 100):
+            and 0 < args.width <= MAX_WIDTH and 0 < args.height <= MAX_HEIGHT and 1 <= args.quality <= 100
+            and 1 <= args.keyframe <= 30):
         print(f"--fps takes 1-{MAX_FPS}, --seconds up to {MAX_LOOP_MS // 1000}, --width up to {MAX_WIDTH}, "
-              f"--height up to {MAX_HEIGHT}, --quality 1-100. Nothing was done.", file=sys.stderr)
+              f"--height up to {MAX_HEIGHT}, --quality 1-100, --keyframe 1-30. Nothing was done.", file=sys.stderr)
         return 2
-    ffmpeg = shutil.which("ffmpeg")
-    if ffmpeg is None or not has_libwebp_anim(ffmpeg):
-        print("needs ffmpeg with libwebp (brew install ffmpeg, apt install ffmpeg). Nothing was done.",
+    ffmpeg, img2webp = shutil.which("ffmpeg"), shutil.which("img2webp")
+    if ffmpeg is None or img2webp is None:
+        print("needs ffmpeg and img2webp (brew install ffmpeg webp, apt install ffmpeg webp). Nothing was done.",
               file=sys.stderr)
         return 2
 
     w, h = args.width, args.height
-    # Even sizes keep the encoder from rounding one side; cover then crop, as Home's CENTER_CROP shows it.
+    # Cover then crop, as Home's CENTER_CROP shows it.
     video = (f"fps={args.fps},scale={w}:{h}:force_original_aspect_ratio=increase:flags=lanczos,"
              f"crop={w}:{h}")
-    command = [ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{args.start}", "-t", f"{args.seconds}",
-               "-i", str(source), "-an", "-vf", video, "-c:v", "libwebp_anim", "-lossless", "0",
-               "-quality", str(args.quality), "-compression_level", "6", "-loop", "0", str(out)]
+    frame_ms = round(1000 / args.fps)
     out.parent.mkdir(parents=True, exist_ok=True)
-    result = subprocess.run(command, capture_output=True, text=True)
-    if result.returncode != 0 or not out.is_file():
-        print(f"ffmpeg failed: {result.stderr.strip()}", file=sys.stderr)
-        return 1
+    with tempfile.TemporaryDirectory() as tmp:
+        frames = Path(tmp) / "frame_%04d.png"
+        result = subprocess.run([ffmpeg, "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{args.start}",
+                                 "-t", f"{args.seconds}", "-i", str(source), "-an", "-vf", video, str(frames)],
+                                capture_output=True, text=True)
+        names = sorted(str(p) for p in Path(tmp).glob("frame_*.png"))
+        if result.returncode != 0 or not names:
+            print(f"ffmpeg failed: {result.stderr.strip() or 'no frames'}", file=sys.stderr)
+            return 1
+        result = subprocess.run([img2webp, "-loop", "0", "-lossy", "-q", str(args.quality), "-m", "6",
+                                 "-kmax", str(args.keyframe), "-d", str(frame_ms), *names, "-o", str(out)],
+                                capture_output=True, text=True)
+        if result.returncode != 0 or not out.is_file():
+            print(f"img2webp failed: {result.stderr.strip()}", file=sys.stderr)
+            return 1
     return check(out)
 
 

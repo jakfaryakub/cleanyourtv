@@ -1,7 +1,7 @@
 """tools/webp_wallpaper.py makes and checks a theme's wallpaper.webp against the Phase 4a limits.
 
-The WebP reader and the limits run anywhere, on WebP files built here byte by byte. The conversion needs ffmpeg with
-libwebp_anim and is skipped without it.
+The WebP reader and the limits run anywhere, on WebP files built here byte by byte. The conversion needs ffmpeg and
+img2webp and is skipped without them.
 
 Run from the repository root: python3 -m unittest discover -s tests -v
 """
@@ -85,7 +85,8 @@ class RefusalTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "in.gif"
             source.write_bytes(b"GIF89a")
-            for extra in (["--fps", "25"], ["--seconds", "12"], ["--width", "1280"], ["--quality", "0"]):
+            for extra in (["--fps", "25"], ["--seconds", "12"], ["--width", "1280"], ["--quality", "0"],
+                          ["--keyframe", "0"]):
                 self.assertEqual(2, run(str(source), str(Path(tmp) / "out.webp"), *extra).returncode, extra)
 
     def test_the_output_is_a_webp(self):
@@ -95,12 +96,7 @@ class RefusalTest(unittest.TestCase):
             self.assertEqual(2, run(str(source), str(Path(tmp) / "out.gif")).returncode)
 
 
-def ffmpeg_webp():
-    path = shutil.which("ffmpeg")
-    return path is not None and webp.has_libwebp_anim(path)
-
-
-@unittest.skipUnless(ffmpeg_webp(), "needs ffmpeg with libwebp_anim")
+@unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("img2webp"), "needs ffmpeg and img2webp")
 class ConvertTest(unittest.TestCase):
     def test_a_clip_becomes_a_looping_webp_within_the_limits(self):
         with tempfile.TemporaryDirectory() as tmp:
