@@ -19,7 +19,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
-| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps passes; idle CPU 20%, pause-when-idle proposed (4a.1) |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps, pause after 300 s, `wallpaper_dim` 25 |
 | 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
 
@@ -300,8 +300,20 @@ Two screenshots 2 s apart during the pause were identical, and after the key the
 
 **Clock over the bright eye, `wallpaper_dim`** with `header_shadow` on: screenshots at 0, 15 and 25
 (`shots/4a1-dim*.png`, not committed). The colour filter works on the animation. Mean brightness of the wallpaper
-band: 129 at 0, 110 at 15, 97 at 25. In the header the clock gains a little contrast at 15 and more at 25; the
-owner picks. The theme stays at 0 until then.
+band: 129 at 0, 110 at 15, 97 at 25. In the header the clock gains a little contrast at 15 and more at 25. The owner
+picked **25**, now in `work/theme-ref` and on the TV.
+
+## Phase 4a done
+
+The experiment theme plays the clip at 640×360 and 12 fps (`wallpaper_animated`), over a JPG of its first frame. It
+pauses after 300 s with no key (`wallpaper_pause_seconds`) and is darkened by 25% (`wallpaper_dim`). The system
+screensaver stops Home after 10 minutes.
+
+- **The dots after "Maghrib 17:51" are the wallpaper, not the text.** They sit on the 3 px grid of the 640×360
+  animation scaled to 1080p, while the text is drawn sharp. They showed in two different frames, at dim 0 and 25.
+  Over the old still wallpaper, and with `wallpaper: false` (plain background), the prayer line has nothing after
+  "17:51". The dots are the eye's sparkle under the line. Nothing to fix in the launcher; `header_scrim` (backlog)
+  would hide them.
 
 ## Phase 4a part 2 result
 
@@ -466,6 +478,15 @@ same theme in Outfit gave:
 - The clock screensaver keeps its own text sizes on purpose.
 
 ## Backlog
+
+- **ClockDream about 20% CPU while the screensaver shows.** Measured in Phase 4a.1: the launcher process kept
+  about 20% of one core with `ClockDream` up and Home `STOPPED`, so it is the dream, not the wallpaper. Not
+  looked at yet. Find which part of the clock scene draws every frame (glow, sky, seconds) and whether it can
+  draw once a minute, as Home's clock does.
+- **`header_scrim`, a dark gradient behind the header only**, as an alternative to `wallpaper_dim`, which darkens the
+  whole picture. A vertical gradient under the clock, the date and the prayer line, from black at some opacity to
+  clear, drawn once as a view's background: no per-frame cost over the animation. Off by default, an opacity
+  0-60. It would also cover small bright details under the prayer line, like the eye's sparkle.
 
 - **GPU slow after a long uptime.** Late on 2026-11-07, every build (the baseline APK included) drew Home at
   p50 46 ms. GPU time per frame was 22 ms instead of 7 ms; after a clean boot it was back to 11 ms.
