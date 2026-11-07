@@ -629,6 +629,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (cfg.prayerTimes && !Double.isNaN(cfg.latitude) && !Double.isNaN(cfg.longitude)) {
             setUpPrayerLine(cfg, Config.HEADER_END.equals(cfg.headerPosition));
         }
+        if (cfg.headerShadow) shadowHeader();
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
         btnVpn = findViewById(R.id.btnVpn);
@@ -2644,6 +2645,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         lp.topMargin = Math.round(10 * density);
         ((ViewGroup) stats.getParent()).addView(line, lp);
         prayerLine = line;
+    }
+
+    /**
+     * header_shadow: a soft dark shadow under the clock, the date and the prayer line, so they read over a light
+     * wallpaper. Text shadows are drawn with the glyphs, and these lines change once a minute at most.
+     */
+    private void shadowHeader() {
+        float radius = 6 * density, dy = 1.5f * density;
+        int colour = 0x99000000;
+        int[] ids = {R.id.clock, R.id.ampm, R.id.date, R.id.greeting, R.id.shamsiDate, R.id.lunarDate};
+        for (int id : ids) ((TextView) findViewById(id)).setShadowLayer(radius, 0, dy, colour);
+        if (prayerLine != null) prayerLine.setShadowLayer(radius, 0, dy, colour);
     }
 
     /** Draws today's times with the next one bold and white, and wakes again when that changes. */

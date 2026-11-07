@@ -160,6 +160,7 @@ A new key needs one there in the same pull request.
 | `prayer_latitude`, `prayer_longitude` | degrees | The place for `prayer_times` only, e.g. `-6.1701` and `106.8311` for Jakarta (south and west are negative). Unset, the build's own place in `config.xml` is used; without either, `prayer_times` shows nothing. The sky and `wallpaper_moods` keep the build's place |
 | `prayer_ihtiyat` | 0 to 5 | Minutes of safety margin added to Subuh, Ashar, Maghrib and Isya before rounding up, as Kemenag does. 2 by default |
 | `top_button_size` | 28 to 42 | The round icon-only top buttons (`icon_only_buttons`) at this many dp, their icons scaled with them; pills that keep a label are unchanged. Unset keeps 42 |
+| `header_shadow` | bool | A soft dark shadow under the clock, the date and the prayer line, so they read over a light wallpaper. `false` by default |
 | `background_color` | `#RRGGBB` | Colour behind everything; black by default |
 | `sky_intensity` | 0 to 100 | Time-of-day backdrop: a dark gradient that follows the clock, 0 hides it (default) |
 | `wallpaper` | bool | Show the theme's picture, `wallpaper.jpg` or its `wallpapers/` collection (`true`), or draw neither (`false`) |
