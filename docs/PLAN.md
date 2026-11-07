@@ -19,8 +19,9 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
-| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | part 1 (code, tool, function test) done; part 2 (A/B with a real clip) next |
-| 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps passes; idle CPU 20%, pause-when-idle proposed (4a.1) |
+| 4a.1 | Pause the animation after N seconds with no key (proposed key `wallpaper_pause_seconds`) | proposed, not built |
+| 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
 
 ## Phase 1b.1 result
 
@@ -268,6 +269,58 @@ Where the code changes go:
   `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts), the experiment's keys merged into its
   `config.json`, and the local `icons/`. Rebuild the copy whenever the repo theme changes; `theme.sh` sends `icons/`
   once 1b.1 adds it.
+
+## Phase 4a part 2 result
+
+A real clip, a private file kept in `work/wallpaper-src/` and never committed: 1920×1080, 60 fps, 15.8 s, no
+watermark. It loops cleanly as a whole: first and last frame differ by 0.25 (mean, 96×54 grey) against 1.24
+between neighbouring frames. But 15.8 s is over the 10 s limit. The best windows of 6-10 s:
+3.00-12.73 s (9.73 s, 0.22) and 4.80-10.93 s (6.13 s, 0.32).
+
+- At 960×540 and 15 fps this detailed clip costs about 23 KB a frame whatever the quality: 9.73 s came to 5.2 MB at
+  q70 and 3.4 MB at q40, over the 3 MB the launcher accepts. So both variants use the 6.13 s window:
+  - B1: 960×540, 15 fps, q50, 2,680,560 B.
+  - B2: 640×360, 12 fps, q70, 1,417,980 B.
+- `wallpaper.jpg` is the clip's frame at 4.80 s, 1920×1080, the animation's first frame, so the switch from the JPG
+  to the animation does not show.
+- The three runs turn `down_opens_library` off. `bench-home.sh` presses Down in its D-pad rounds, and with the key
+  on it opened the App library and ran the rest of the keys there. `work/theme-ref` keeps the key on.
+- After a clean boot (unplugged), in the order A, B1, B2, each 90 s after its push. Display mode 1 at 60 fps.
+  `bench-home.sh`'s idle gate refused B1 and B2 (318% and 347% idle, against 360%), because the animation itself
+  keeps the TV that busy. Both were re-run with `SKIP_GATE=1`, so B1 and B2 ran at 19 and 23 min of uptime.
+
+| | A, JPG only | B1, 960×540 15 fps | B2, 640×360 12 fps |
+|---|---|---|---|
+| Uptime | 4 min | 19 min | 23 min |
+| PSS after warm-up | 47,616 KB | 55,733 KB (+8.1 MB) | 50,906 KB (+3.3 MB) |
+| PSS after keys | 37,791 KB | 46,692 KB (+8.9 MB) | 41,392 KB (+3.6 MB) |
+| D-pad frames, janky | 442, 0.00% | 617, 0.97% | 577, 0.00% |
+| D-pad frame p50 / p90 | 8 / 8 ms | 10 / 12 ms | 8 / 10 ms |
+| D-pad GPU p50 / p90 | 6 / 7 ms | 5 / 7 ms | 6 / 7 ms |
+| Idle 30 s: frames, janky | 37, 0.00% | 475, 0.84% | 391, 0.26% |
+| Idle frame p50 / p90 | 6 / 8 ms | 12 / 13 ms | 10 / 11 ms |
+| Launcher CPU, Home idle 60 s (`top`) | 0.1% | 40.3% | 20.4% |
+| Whole TV idle during the status step | 376% (gate) | 316% | 344% |
+| MemAvailable after | 948,524 kB | 951,720 kB | 1,004,656 kB |
+
+- **B2 passes the main limits**: janky +0.00 pp and PSS +3.6 MB. Its idle CPU, 20.4% of one core, sits at the
+  survey's 20%.
+- **B1 fails PSS after the keys** (+8.9 MB over +8 MB) and uses twice B2's CPU.
+- MemAvailable moves with the TV's state more than with the theme, as in the earlier phases.
+- **Recommended: B2**, now in `work/theme-ref`. No FATAL in logcat. With the same 1.4 MB budget a longer loop
+  fits too: the 9.73 s window at 640×360 / 12 fps came to 2.1 MB at q70.
+
+**4a.1, proposal only:** `wallpaper_pause_seconds`, 0 (never) by default. After that many seconds with no key on
+Home, `WallpaperPlayer.stop()` pauses the animation on the frame it shows; the first key, or Home coming back,
+starts it again. The key does not reveal the row, so it works next to `rows_autohide_seconds`, from the same
+key feed in `dispatchKeyEvent`. Expected effect, from the numbers above:
+- The launcher drops from 20% to about 0.1-0.3% (A's idle, and the 0.3% measured with Settings open in part 1)
+  once paused.
+- With 60 s, Home left alone for 10 minutes averages about 20% × 60/600 ≈ 2% of one core, and about 0.2% over
+  an hour.
+- No memory change: the paused drawable keeps its buffers. Releasing them as well would save about 3 MB, but the
+  first key would then wait for a decode.
+- A small, unit-testable timer, like `RowsAutohide`, and two calls into `WallpaperPlayer`.
 
 ## Phase 4a part 1 result
 
