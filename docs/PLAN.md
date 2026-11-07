@@ -16,6 +16,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | done (by hand, see below) |
 | 1b.5 | Minimal header top right (`header_position`, `clock_size`, `top_button_size`, `header_shadow`) with today's five prayer times under it (`prayer_times`), computed offline | done |
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | done |
+| 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | next (surveyed, see below) |
@@ -71,10 +72,37 @@ run 90 s after its push:
 
 The logo row draws as fast as the cards, and its PSS is about 1 MB lower (no glass, no card fills).
 
+## Phase 1b.6 result
+
+Navigation and logos, checked on the T6C (Android 12, `STT2.230203.001`). No A/B: the keys change where focus goes,
+not what Home draws.
+
+- Existing keys first: `show_library_pill: false` alone did not hide the pill, as it only hides it while
+  `library_button` is on. The theme had it set and the pill still sat at the row's end.
+- `row_wrap` (off by default): Left from the first tile goes to the last and Right from the last to the first,
+  through `focusTile`'s smooth scroll; in a grid each row wraps within itself. `GridNavigation.wrapTarget`, unit
+  tested. On the TV: Left from YouTube to Weather and Right back, the other tiles still dimmed.
+- `down_opens_library` (off by default, needs `app_library`): Down from the last or only row opens the App library,
+  and Back returns to the tile it came from (Vidio on the TV). It counts as a way in, so
+  `show_library_pill: false` now hides the pill. A shown pill still takes Down first. `GridNavigation.down`, unit
+  tested.
+- With `rows_autohide_seconds`, the first key, Down included, only brings the row back. `RowsAutohide` already
+  did this; a test now covers Down. On the TV, a key after 30 s idle only showed the row.
+- **Bug, Left from the App library pill went up.** In a single row the pill sits after the last tile, but its key
+  listener was written for the footer under a grid: Left did nothing and Up went back to the row. Now the key back
+  towards the row (Left, or Right in an RTL grid) goes to the last tile and Up goes to the top bar. On the TV, with
+  the pill shown: Left went to Weather and Up to the Wi-Fi button. The new layout has no pill at all.
+- `tools/logo.py --icon <symbol> --text "<Name>"`: a white Material Symbol (`tools/material-symbols/`, Apache 2.0,
+  with source commit and licence) and the name in the theme font, through a private fontconfig. A long name is
+  set smaller first, so the icon stays 120 px high. The four logos are in `work/theme-ref/icons/`: Media Player
+  `com.tcl.ui_mediaCenter`, Settings `com.android.tv.settings`, TV `com.tcl.tv`, Weather
+  `io.github.sumyabazar1.weather`. Play Store has no logo yet and shows its name.
+- The theme turns on `row_wrap` and `down_opens_library`. APK 598,245 B, lint 0 errors.
+
 ## Phase 1b done
 
 Phase 1b is finished: logos from the theme (1b.1), logo tiles with focus by scale and opacity (1b.2), the
-minimal header with prayer times (1b.5) and the app row hidden while idle (1b.3). Left: 4a (animated wallpaper,
+minimal header with prayer times (1b.5), the app row hidden while idle (1b.3) and the 1b.6 polish. Left: 4a (animated wallpaper,
 measure first) and 3 (theme picker on the TV).
 
 `header_shadow` puts a soft shadow under the clock, the date and the prayer line. `rows_autohide_seconds` (30 in the
