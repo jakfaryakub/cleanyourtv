@@ -227,6 +227,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean logoTiles;
     /** focus_scale from the theme, or 0 for the built-in zoom. */
     private final float themeScale;
+    /** unfocused_opacity: the opacity of a bare tile's logo or wordmark while it is not focused. */
+    private final float restOpacity;
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
@@ -252,6 +254,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.appLogos = cfg.appLogos;
         this.logoTiles = Config.TILE_LOGO.equals(cfg.tileStyle);
         this.themeScale = cfg.focusScale;
+        this.restOpacity = cfg.unfocusedOpacity;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -476,7 +479,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             label.setPadding(label.getPaddingLeft(), label.getPaddingTop(), label.getPaddingRight(), Math.round(4f * density));
         }
         return new Holder(v, listener, animations, advancedEffects, reducedMotion, restNameAlpha, focusOvershoot,
-                focusScale());
+                focusScale(), restOpacity);
     }
 
     @Override
@@ -753,6 +756,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     /** Share of the tile's height a wordmark's text takes (tile_style logo, an app with no logo). */
     static final float WORDMARK_SHARE = 0.22f;
 
+    /** A tile's logo or wordmark opacity: dimmed to unfocused_opacity on a bare tile that is not focused. */
+    static float contentAlpha(boolean focused, boolean bare, float restOpacity) {
+        return bare && !focused ? restOpacity : 1f;
+    }
+
     static float wordmarkTextPx(int tileH) {
         return tileH * WORDMARK_SHARE;
     }
@@ -761,7 +769,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * tile_style logo: no card fill and no rounded outline, which would draw a shadow and clip the zoomed logo. A
      * recycled view that held a module card gets them back.
      */
-    private static void setBare(Holder h, boolean bare) {
+    private void setBare(Holder h, boolean bare) {
+        float a = contentAlpha(h.card.isFocused(), bare, restOpacity);
+        h.banner.setAlpha(a);
+        h.label.setAlpha(a);
         if (bare == h.bare) return;
         h.bare = bare;
         h.card.setOutlineProvider(bare ? null : h.tileOutline);
@@ -1044,7 +1055,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         boolean bare;
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
-               boolean reducedMotion, float restNameAlpha, boolean overshoot, float zoom) {
+               boolean reducedMotion, float restNameAlpha, boolean overshoot, float zoom, float restOpacity) {
             super(v);
             card = v.findViewById(R.id.card);
             cardBackground = card.getBackground();
@@ -1080,8 +1091,21 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             card.setOnFocusChangeListener((view, focused) -> {
                 view.animate().cancel();
                 banner.animate().cancel();
+                label.animate().cancel();
                 name.animate().cancel();
                 float s = focused ? zoom : 1f;
+                // tile_style logo: the logo or wordmark itself carries the opacity, never the card, so no layer is
+                // needed (an ImageView or TextView with no background draws its alpha directly).
+                if (bare && restOpacity < 1f) {
+                    float a = contentAlpha(focused, true, restOpacity);
+                    if (!animations || reducedMotion) {
+                        banner.setAlpha(a);
+                        label.setAlpha(a);
+                    } else {
+                        banner.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                        label.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                    }
+                }
                 if (!animations) {
                     view.setScaleX(1f);
                     view.setScaleY(1f);

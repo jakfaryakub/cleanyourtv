@@ -263,6 +263,8 @@ final class Config {
     final boolean focusFrame;
     /** How far the focused tile grows (config.json focus_scale, 1.0-1.3), or 0 for the built-in 1.10 / 1.12. */
     final float focusScale;
+    /** With tile_style logo, how opaque a tile's logo is while it is not focused (config.json unfocused_opacity). */
+    final float unfocusedOpacity;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -310,8 +312,9 @@ final class Config {
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
-                   float focusScale) {
+                   float focusScale, float unfocusedOpacity) {
         this.font = font;
+        this.unfocusedOpacity = unfocusedOpacity;
         this.focusFrame = focusFrame;
         this.focusScale = focusScale;
         this.tileStyle = tileStyle(tileStyle);
@@ -569,6 +572,7 @@ final class Config {
         String tileStyle = TILE_CARD;
         boolean focusFrame = true;
         float focusScale = 0f;
+        float unfocusedOpacity = 1f;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -691,6 +695,7 @@ final class Config {
             tileStyle = string(json, "tile_style", tileStyle);
             focusFrame = bool(json, "focus_frame", focusFrame);
             focusScale = focusScale(json.opt("focus_scale"), focusScale);
+            unfocusedOpacity = unfocusedOpacity(json.opt("unfocused_opacity"), unfocusedOpacity);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -755,7 +760,7 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font, fontScale, appLogos, tileStyle, focusFrame, focusScale);
+                font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
@@ -774,6 +779,13 @@ final class Config {
         if (!(v instanceof Number)) return fallback;
         float f = ((Number) v).floatValue();
         return f >= 1f && f <= 1.3f ? f : fallback;
+    }
+
+    /** unfocused_opacity: a number from 0.3 to 1.0 (no dimming), or the fallback for anything else. */
+    static float unfocusedOpacity(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 0.3f && f <= 1f ? f : fallback;
     }
 
     static float fontScale(Object v, float fallback) {
