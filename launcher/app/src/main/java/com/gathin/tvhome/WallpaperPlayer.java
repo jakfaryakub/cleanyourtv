@@ -76,6 +76,8 @@ final class WallpaperPlayer {
     /** The playing AnimatedImageDrawable (as a Drawable, so API 26 never loads the class); null while the JPG shows. */
     private Drawable animation;
     private boolean animationLoading;
+    /** wallpaper_pause_seconds: held on its frame after an idle wait; start() and showAnimation() respect it. */
+    private boolean paused;
 
     WallpaperPlayer(Context context, FrameLayout root, Config config) {
         this.root = root;
@@ -150,8 +152,20 @@ final class WallpaperPlayer {
     void start() {
         active = true;
         update();   // first, so a JPG released under memory pressure is back before the animation
-        if (animation != null) play(animation, true);
+        if (animation != null && !paused) play(animation, true);
         else loadAnimation();
+    }
+
+    /** wallpaper_pause_seconds: holds the animation on the frame it shows, or plays it again; the JPG is untouched. */
+    void setPaused(boolean pause) {
+        if (paused == pause) return;
+        paused = pause;
+        if (animation != null && active) play(animation, !pause);
+    }
+
+    /** True while an animation is on screen: only then is there anything to pause. */
+    boolean animating() {
+        return animation != null;
     }
 
     void stop() {
@@ -238,7 +252,7 @@ final class WallpaperPlayer {
         image.setImageDrawable(decoded);
         // The JPG is no longer drawn; release it once a frame has shown the animation, as show() does.
         if (old != null) image.postDelayed(old::recycle, 500);
-        if (active) play(decoded, true);
+        if (active && !paused) play(decoded, true);
     }
 
     void update() {

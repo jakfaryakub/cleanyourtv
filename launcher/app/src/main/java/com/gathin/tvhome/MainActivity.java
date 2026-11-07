@@ -178,6 +178,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** rows_autohide_seconds: when the app row fades out and how the first key brings it back; null when off. */
     private RowsAutohide autohide;
     private final Runnable autohideTick = this::checkAutohide;
+    /** wallpaper_pause_seconds: when the animated wallpaper pauses on its frame; null when off. */
+    private WallpaperPause wallpaperPause;
+    private final Runnable wallpaperPauseTick = this::checkWallpaperPause;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
     private String glowStyle;
     /** config.xml cinematic_white_focus: the cinematic shelf keeps the white highlight. */
@@ -636,6 +639,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         if (cfg.headerShadow) shadowHeader();
         if (cfg.rowsAutohideSeconds > 0) autohide = new RowsAutohide(cfg.rowsAutohideSeconds, SystemClock.uptimeMillis());
+        if (cfg.wallpaperPauseSeconds > 0 && cfg.wallpaperAnimated != null) {
+            wallpaperPause = new WallpaperPause(cfg.wallpaperPauseSeconds, SystemClock.uptimeMillis());
+        }
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
         btnVpn = findViewById(R.id.btnVpn);
@@ -1087,6 +1093,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLibraryIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
+        playWallpaperAgain();   // Home pressed on Home: as a key, without taking the press from what follows
         if (autohide != null && autohide.hidden()) {
             // Home on a hidden row only brings it back, as any first key does.
             autohide.show(SystemClock.uptimeMillis());
@@ -1175,7 +1182,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         if (gameDay != null) gameDay.start();
         sky.update();
+        if (wallpaperPause != null) wallpaperPause.show(SystemClock.uptimeMillis());
+        wallpaperPlayer.setPaused(false);
         wallpaperPlayer.start();
+        scheduleWallpaperPause();
         handler.postDelayed(minuteTick, MINUTE_MS);
         updatePrayerLine();
         if (autohide != null) {
@@ -1356,6 +1366,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
+        handler.removeCallbacks(wallpaperPauseTick);
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
@@ -1476,6 +1487,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Before autohide, which may take the key: a paused wallpaper plays again on any key, and the key goes on.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) playWallpaperAgain();
         if (autohide != null) {
             int took = autohide.onKey(event.getKeyCode(), event.getAction() == KeyEvent.ACTION_DOWN,
                     SystemClock.uptimeMillis());
@@ -2723,6 +2736,30 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int[] ids = {R.id.clock, R.id.ampm, R.id.date, R.id.greeting, R.id.shamsiDate, R.id.lunarDate};
         for (int id : ids) ((TextView) findViewById(id)).setShadowLayer(radius, 0, dy, colour);
         if (prayerLine != null) prayerLine.setShadowLayer(radius, 0, dy, colour);
+    }
+
+    /** A key, or Home pressed: the wait starts over, and a paused wallpaper plays again. */
+    private void playWallpaperAgain() {
+        if (wallpaperPause == null) return;
+        if (wallpaperPause.onKey(SystemClock.uptimeMillis())) wallpaperPlayer.setPaused(false);
+        scheduleWallpaperPause();
+    }
+
+    private void scheduleWallpaperPause() {
+        if (wallpaperPause == null) return;
+        handler.removeCallbacks(wallpaperPauseTick);
+        if (started) handler.postDelayed(wallpaperPauseTick, wallpaperPause.delayMs(SystemClock.uptimeMillis()));
+    }
+
+    /** wallpaper_pause_seconds: holds the animation on its frame once Home has had no key for the wait. */
+    private void checkWallpaperPause() {
+        if (wallpaperPause == null || !started) return;
+        if (wallpaperPause.pauseNow(SystemClock.uptimeMillis())) {
+            wallpaperPlayer.setPaused(true);
+            android.util.Log.i("TvHome.Wallpaper", "animation paused: no key for wallpaper_pause_seconds");
+        } else {
+            scheduleWallpaperPause();
+        }
     }
 
     private void scheduleAutohide() {
