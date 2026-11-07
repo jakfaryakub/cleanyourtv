@@ -14,7 +14,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done |
 | 1b.2 | Logo tiles with no card, focus by scale and opacity: `tile_style: "logo"`, `focus_frame: false`, `focus_scale`, `unfocused_opacity` | done |
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | done (by hand, see below) |
-| 1b.5 | Minimal header top right (`header_position`, `clock_size`) with today's five prayer times under it (`prayer_times`), computed offline | planned, next |
+| 1b.5 | Minimal header top right (`header_position`, `clock_size`) with today's five prayer times under it (`prayer_times`), computed offline | done; layout variant to choose |
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started, after 1b.5 |
 | 2 | Tile size, gaps and label size as theme keys | not started |
 | 3 | Theme picker on the TV, with the remote | not started |
@@ -70,6 +70,56 @@ run 90 s after its push:
 | Janky frames | 0.00% | 0.00% | 0.00% |
 
 The logo row draws as fast as the cards, and its PSS is about 1 MB lower (no glass, no card fills).
+
+## Phase 1b.5 result
+
+Kemenag's official table for Kota Jakarta (SIHAT, read 2026-11-07, 6 10 12.32 S, 106 49 51.78 E) is in
+`launcher/app/src/test/resources/prayer/`: a tuning set of 6 dates, a held-out test set of 6, and every day of the nine
+months that were loaded (272 days). The parameters were confirmed on the tuning set only (0 minutes off) and the
+test set was run once afterwards (at most 1 minute off).
+
+The safety rule is asymmetric: never earlier than Kemenag, at most a minute later. Before the rule, against the
+272 days:
+
+| | Earlier | Same | 1 min later |
+|---|---|---|---|
+| Fajr | 0 | 267 | 5 |
+| Dhuhr | 1 | 267 | 4 |
+| Asr | 22 | 220 | 30 |
+| Maghrib | 2 | 264 | 6 |
+| Isha | 2 | 267 | 3 |
+
+The unrounded times sat 1.39 minutes early to 0.18 late, so any margin from 24 to 49 seconds keeps every day at 0 or
++1. `Prayer.SAFETY_SECONDS` is 30; the astronomy is unchanged. After it:
+
+| | Earlier | Same | 1 min later |
+|---|---|---|---|
+| Fajr | 0 | 137 | 135 |
+| Dhuhr | 0 | 132 | 140 |
+| Asr | 0 | 138 | 134 |
+| Maghrib | 0 | 141 | 131 |
+| Isha | 0 | 128 | 144 |
+
+Names are in English (Fajr, Dhuhr, Asr, Maghrib, Isha). After Isha the line shows tomorrow's times behind a small
+"Tomorrow". The date at the top right lost both ends after a cold boot (its lines kept `match_parent` in a column
+that wraps); fixed, and the longest English date, "WEDNESDAY 30 SEPTEMBER", needs about 356 of the 1,151 px it has
+at `clock_size` 40.
+
+A/B/A after a clean boot, the experiment theme without (A) and with (B) `header_position`, `clock_size` and
+`prayer_times`:
+
+| | A | B | A again |
+|---|---|---|---|
+| Uptime | 22 min | 26 min | 30 min |
+| MemAvailable / SwapFree | 952,948 / 377,596 kB | 970,864 / 379,900 kB | 978,788 / 382,716 kB |
+| PSS after warm-up | 54,445 KB | 54,653 KB | 54,145 KB |
+| PSS after keys | 37,907 KB | 37,647 KB | 37,405 KB |
+| Frame p50 / p90 | 7 / 7 ms | 7 / 7 ms | 7 / 7 ms |
+| GPU p50 / p90 | 5 / 6 ms | 5 / 6 ms | 5 / 6 ms |
+| Janky frames | 0.00% | 0.00% | 0.00% |
+
+The header costs no frame time and well under a megabyte. The top right reads as crowded: three layouts are drawn
+as mock-ups for a choice (A: date under a large clock, B: prayers top left, C: prayers above the app row).
 
 ## Phase 1b.5 plan: minimal header and prayer times
 
