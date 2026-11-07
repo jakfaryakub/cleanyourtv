@@ -11,7 +11,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 0 | APK size gate 640 KB for this fork, performance baseline | done |
 | 1a | Theme font: `font` (a `.ttf`/`.otf` in the theme's `fonts/`) and `font_scale` (0.85-1.25) | done |
 | 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | not started |
-| 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done; jank still to measure after a clean boot |
+| 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done |
 | 1b.2 | Logo tiles with no card, focus by scale only: `tile_style: "logo"`, `focus_frame: false`, `focus_scale` | not started |
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started |
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | not started |
@@ -44,8 +44,8 @@ A/B/A with `tools/bench-home.sh`, the same theme without and with `app_logos`, r
 | Frame p50 / GPU p50 | 48 / 22 ms | 48 / 22 ms | 48 / 22 ms |
 
 The logos add no PSS that the runs can tell apart. All three runs were in the slow-GPU state from the backlog, so
-their jank is not comparable with the 14:36 baseline; the A/B needs a run after a clean boot (power off, unplug for
-10 seconds) to settle jank.
+their jank is not comparable with the 14:36 baseline. After a clean boot the logos cost nothing either: 7 ms p50
+and 0% janky with and without them (runs 2 and 3 in the backlog entry below).
 
 ## Phase 1b target
 
@@ -111,6 +111,22 @@ same theme in Outfit gave:
   - If it reproduces, read the GPU frequency and `dumpsys gfxinfo` framestats on both runs.
   - It came back after only 1 h 44 min on 2026-11-07 (Phase 1b.1 A/B): p50 48 ms, GPU 22 ms, MemAvailable
     657 MB, SwapFree 202 MB of 665 MB, load average 25. Uptime alone does not explain it.
+  - **The TV's state, not the theme.** After a clean boot (unplugged, ADB came back on its own), four
+    `tools/bench-home.sh` runs in a row with no reboot between, each 90 s after its theme push:
+
+    | Run | Theme | Uptime | MemFree | MemAvailable | SwapFree | Frame p50 | GPU p50 | Janky | PSS after warm-up |
+    |---|---|---|---|---|---|---|---|---|---|
+    | 1 | T6C (`examples/tcl-t6c-indonesia/theme`) | 6 min | 56,692 kB | 948,216 kB | 371,964 kB | 12 ms | 7 ms | 0.28% | 50,526 KB |
+    | 2 | Experiment, no `app_logos` | 10 min | 29,828 kB | 926,684 kB | 376,828 kB | 7 ms | 6 ms | 0.00% | 50,166 KB |
+    | 3 | Experiment, `app_logos` | 13 min | 75,116 kB | 955,416 kB | 371,964 kB | 7 ms | 6 ms | 0.00% | 49,988 KB |
+    | 4 | T6C again | 17 min | 39,768 kB | 968,188 kB | 341,500 kB | 10 ms | 7 ms | 0.09% | 52,070 KB |
+
+    Display mode 1 at 60 fps in every run. All four are fast, so the 22 ms GPU of the 1b.1 A/B came from the TV's
+    state, not from the experiment theme, which is in fact the lightest of the two (no cinematic shelf, no glass
+    dock). Load average was about 25 in the fast runs too, so it is no sign of the slow state; MemAvailable (657 MB
+    slow, 927-968 MB fast) and SwapFree (202 MB slow, 342-377 MB fast) are the readings that differed.
+  - Next time it is slow: record MemAvailable and SwapFree before and after a clean boot, and the GPU frequency, to
+    see whether memory pressure leads it.
 
 ## Using the TV
 
