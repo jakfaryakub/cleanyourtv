@@ -5,6 +5,9 @@ import android.graphics.BitmapFactory;
 import android.util.Log;
 
 import java.io.File;
+import java.io.IOException;
+import java.io.RandomAccessFile;
+import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -13,7 +16,7 @@ import java.util.Map;
  * usually wider than tall, never bundled in the APK. Each logo is decoded once for the box it is drawn in, scaled
  * down to fit it, and kept in a small cache; the box size is part of the cache key, so a tile that changes size
  * gets a new copy instead of a blurred or oversized one. Anything wrong with a file - missing, over 512 KB, over
- * 4096 px on a side, not a PNG Android can read - means no logo, and the tile keeps its banner or icon; nothing
+ * 4096 px on a side, cut short, not a PNG Android can read - means no logo, and the tile keeps its banner or icon; nothing
  * here throws.
  */
 final class ThemeIcons {
@@ -22,6 +25,8 @@ final class ThemeIcons {
     /** Enough for every dock app and a few more; a theme with more logos decodes the rest again when they scroll in. */
     static final int CACHE_SIZE = 24;
     private static final String TAG = "ThemeIcons";
+    /** The last 12 bytes of every whole PNG: the empty IEND chunk and its CRC. */
+    private static final byte[] IEND = {0, 0, 0, 0, 'I', 'E', 'N', 'D', (byte) 0xAE, 0x42, 0x60, (byte) 0x82};
 
     private static final Map<String, Bitmap> cache = new LinkedHashMap<String, Bitmap>(CACHE_SIZE, 0.75f, true) {
         @Override
@@ -62,7 +67,7 @@ final class ThemeIcons {
     }
 
     private static Bitmap decode(File f, int maxW, int maxH) {
-        if (!f.isFile() || f.length() <= 0 || f.length() > MAX_BYTES) return null;
+        if (!f.isFile() || f.length() <= 0 || f.length() > MAX_BYTES || !whole(f)) return null;
         BitmapFactory.Options bounds = new BitmapFactory.Options();
         bounds.inJustDecodeBounds = true;
         BitmapFactory.decodeFile(f.getPath(), bounds);
@@ -83,6 +88,27 @@ final class ThemeIcons {
         if (hardware == null) return bmp;
         bmp.recycle();
         return hardware;
+    }
+
+    /**
+     * A PNG cut short (a push that stopped halfway) still decodes: Android fills the missing rows with nothing and
+     * the tile shows an empty card. Only a file that ends in IEND is drawn.
+     */
+    private static boolean whole(File f) {
+        try (RandomAccessFile in = new RandomAccessFile(f, "r")) {
+            if (in.length() < IEND.length) return false;
+            byte[] tail = new byte[IEND.length];
+            in.seek(in.length() - IEND.length);
+            in.readFully(tail);
+            return endsWithIend(tail);
+        } catch (IOException e) {
+            return false;
+        }
+    }
+
+    static boolean endsWithIend(byte[] tail) {
+        return tail != null && tail.length >= IEND.length
+                && Arrays.equals(IEND, Arrays.copyOfRange(tail, tail.length - IEND.length, tail.length));
     }
 
     static String key(String path, long length, long modified, int maxW, int maxH) {

@@ -46,6 +46,17 @@ public class ThemeIconsTest {
         assertFalse(ThemeIcons.accepted(0, 0, "image/png"));
     }
 
+    @Test public void onlyAWholePngIsDrawn() {
+        byte[] iend = {0, 0, 0, 0, 'I', 'E', 'N', 'D', (byte) 0xAE, 0x42, 0x60, (byte) 0x82};
+        byte[] longer = new byte[40];
+        System.arraycopy(iend, 0, longer, 28, iend.length);
+        assertTrue(ThemeIcons.endsWithIend(iend));
+        assertTrue(ThemeIcons.endsWithIend(longer));
+        assertFalse(ThemeIcons.endsWithIend(new byte[40]));
+        assertFalse(ThemeIcons.endsWithIend(new byte[]{'I', 'E', 'N', 'D'}));
+        assertFalse(ThemeIcons.endsWithIend(null));
+    }
+
     @Test public void theBoxSizeIsPartOfTheCacheKey() {
         String small = ThemeIcons.key("/t/icons/a.b.png", 10, 1, 250, 85);
         assertNotEquals(small, ThemeIcons.key("/t/icons/a.b.png", 10, 1, 300, 85));
