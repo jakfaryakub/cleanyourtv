@@ -235,10 +235,18 @@ class IconRenderTest(unittest.TestCase):
         self.assertEqual((120, 6), (height, kind))
         self.assertGreater(width, 120 * (1 + logo.TEXT_GAP))   # the icon, the gap, then the text
 
-    def test_a_long_name_scales_the_logo_to_the_max_width(self):
-        width, height, _ = self.render("Media Player")
+    def test_a_long_name_shrinks_its_text_before_the_icon(self):
+        width, height, _ = self.render("Settings")
+        self.assertEqual((360, 120), (width, height))   # the text alone got smaller
+
+    def test_a_name_too_long_even_at_the_smallest_text_scales_the_logo(self):
+        width, height, _ = self.render("Media Player Plus")
         self.assertEqual(360, width)
         self.assertLess(height, 120)
+
+    def test_the_text_size_stays_between_its_floor_and_its_default(self):
+        self.assertEqual(60, logo.icon_text_size(120, 1000, (0, 0, 100, 10)))
+        self.assertAlmostEqual(43.2, logo.icon_text_size(120, 360, (0, 0, 10_000, 10)))
 
     def test_the_icon_logo_takes_a_shadow_too(self):
         width, height, _ = self.render("TV", "--shadow")

@@ -13,8 +13,8 @@ Usage:
 `--icon` makes a logo for a system app that has no wordmark: a white Material Symbol from tools/material-symbols/
 (Apache 2.0, see its README) with `--text` beside it in white, in the theme's font. `--font` is a .ttf/.otf file;
 by default the one work/theme-ref/config.json names in its "font" key, from work/theme-ref/fonts/. The icon is
-`--height` high, so the logo stands as high as a wordmark made with the same --height; text that makes it wider
-than --max-width scales the whole logo down, as for a wordmark. The text is drawn by rsvg-convert through a
+`--height` high, so the logo stands as high as a wordmark made with the same --height; a long name is set smaller
+first (down to 0.36 of the height), and only text still too wide for --max-width scales the whole logo down. The text is drawn by rsvg-convert through a
 private fontconfig that holds only that font file.
 
 The logo is rendered with its transparency kept, `--height` px high (120 by default); a logo that would then be
@@ -54,8 +54,10 @@ DEFAULT_OUT = ROOT / "work" / "theme-ref" / "icons"
 THEME_REF = ROOT / "work" / "theme-ref"
 SYMBOLS = ROOT / "tools" / "material-symbols"
 ICON_NAME = re.compile(r"[a-z0-9_]+")
-# --icon layout, as fractions of the logo's height: the text's size and the gap between icon and text.
+# --icon layout, as fractions of the logo's height: the text's size, the smallest it shrinks to before the whole
+# logo is scaled down to fit --max-width, and the gap between icon and text.
 TEXT_SIZE = 0.5
+TEXT_SIZE_MIN = 0.36
 TEXT_GAP = 0.2
 MEASURE_SIZE, MEASURE_BASELINE = 100, 150   # the text is measured at this size, on this baseline, in px
 # ThemeFiles.ICON in the launcher, without the suffix: two or more Java identifiers joined by dots.
@@ -144,13 +146,22 @@ def text_svg(text, size, x, y):
             f'fill="#FFFFFF">{escaped}</text>')
 
 
-def icon_logo_svg(icon_svg, text, height, box):
+def icon_text_size(height, max_width, box):
+    """The text's size: TEXT_SIZE, or smaller down to TEXT_SIZE_MIN when the logo would be wider than max_width,
+    so a long name keeps the icon as high as the other logos instead of shrinking all of it."""
+    room = max_width - height * (1 + TEXT_GAP)
+    fits = room * MEASURE_SIZE / (box[2] - box[0])
+    return max(height * TEXT_SIZE_MIN, min(height * TEXT_SIZE, fits))
+
+
+def icon_logo_svg(icon_svg, text, height, box, text_size=None):
     """The icon `height` px square, white, then the text centred on it; box is the text measured by alpha_box."""
     view = re.search(r"viewBox=([\"'])(.*?)\1", icon_svg)
     paths = "".join(re.findall(r"<path\b[^>]*/>", icon_svg))
     if not view or not paths:
         raise ValueError("the icon has no viewBox or no path")
-    scale = height * TEXT_SIZE / MEASURE_SIZE
+    text_size = text_size or height * TEXT_SIZE
+    scale = text_size / MEASURE_SIZE
     left, top, right, bottom = box
     text_x = height * (1 + TEXT_GAP) - left * scale
     baseline = height / 2 - ((top + bottom) / 2 - MEASURE_BASELINE) * scale
@@ -158,7 +169,7 @@ def icon_logo_svg(icon_svg, text, height, box):
     return (f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.2f}" height="{height}" '
             f'viewBox="0 0 {width:.2f} {height}">'
             f'<svg x="0" y="0" width="{height}" height="{height}" viewBox="{view.group(2)}" fill="#FFFFFF">{paths}</svg>'
-            f'{text_svg(text, height * TEXT_SIZE, text_x, baseline)}</svg>')
+            f'{text_svg(text, text_size, text_x, baseline)}</svg>')
 
 
 def recolour(svg, colour):
@@ -361,7 +372,8 @@ def icon_main(args):
             if box is None:
                 raise ValueError("the text drew nothing (does the font have these letters?)")
             svg_path = Path(tmp) / "logo.svg"
-            svg_path.write_text(icon_logo_svg(icon.read_text(encoding="utf-8"), args.text, args.height, box),
+            size = icon_text_size(args.height, args.max_width, box)
+            svg_path.write_text(icon_logo_svg(icon.read_text(encoding="utf-8"), args.text, args.height, box, size),
                                 encoding="utf-8")
             width, height = render(rsvg, svg_path, out_path, args.height, args.max_width)
             if args.shadow:
