@@ -11,7 +11,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 0 | APK size gate 640 KB for this fork, performance baseline | done |
 | 1a | Theme font: `font` (a `.ttf`/`.otf` in the theme's `fonts/`) and `font_scale` (0.85-1.25) | done |
 | 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | not started |
-| 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | not started |
+| 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done; jank still to measure after a clean boot |
 | 1b.2 | Logo tiles with no card, focus by scale only: `tile_style: "logo"`, `focus_frame: false`, `focus_scale` | not started |
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started |
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | not started |
@@ -20,6 +20,32 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 3 | Theme picker on the TV, with the remote | not started |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | not started |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
+
+## Phase 1b.1 result
+
+`app_logos` draws `icons/<package>.png` centred on the tile's dark card; `tools/logo.py` makes the PNGs. On the T6C
+all five dock apps show their wordmark (`docs/switches/app_logos.jpg`). Checked on the TV:
+
+- With `icons/` pushed but no `app_logos` key, Home is identical to the 1b.0 screenshot (`tools/screendiff.py`,
+  clock masked).
+- With three logos, the other two tiles keep their own artwork.
+- A logo over 4096 px, and a PNG cut short, keep the app's artwork with a `ThemeIcons` warning in logcat. Android
+  decoded the cut PNG with empty rows at first, so `ThemeIcons` now draws only a file that ends in `IEND`.
+- `tools/theme.sh --reset` empties `icons/` on the TV.
+
+A/B/A with `tools/bench-home.sh`, the same theme without and with `app_logos`, run back to back without a reboot:
+
+| | A, no logos | B, five logos | A again |
+|---|---|---|---|
+| Uptime | 1:44 | 1:48 | 1:52 |
+| PSS after warm-up | 55,938 KB | 54,766 KB | 55,404 KB |
+| PSS after keys | 39,367 KB | 38,727 KB | 39,064 KB |
+| Janky frames | 22.81% | 22.20% | 29.73% |
+| Frame p50 / GPU p50 | 48 / 22 ms | 48 / 22 ms | 48 / 22 ms |
+
+The logos add no PSS that the runs can tell apart. All three runs were in the slow-GPU state from the backlog, so
+their jank is not comparable with the 14:36 baseline; the A/B needs a run after a clean boot (power off, unplug for
+10 seconds) to settle jank.
 
 ## Phase 1b target
 
@@ -83,6 +109,8 @@ same theme in Outfit gave:
   - Run `tools/bench-home.sh` with an uptime over 6 hours and compare it with the 14:36 baseline.
   - Record uptime, MemFree, MemAvailable, SwapFree and the GPU percentiles.
   - If it reproduces, read the GPU frequency and `dumpsys gfxinfo` framestats on both runs.
+  - It came back after only 1 h 44 min on 2026-11-07 (Phase 1b.1 A/B): p50 48 ms, GPU 22 ms, MemAvailable
+    657 MB, SwapFree 202 MB of 665 MB, load average 25. Uptime alone does not explain it.
 
 ## Using the TV
 
