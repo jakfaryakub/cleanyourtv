@@ -114,12 +114,14 @@ class RenderTest(unittest.TestCase):
         png = (self.icons / "com.example.app.png").read_bytes()
         self.assertEqual((360, 90, 6), self.render("small.png", png))
 
-    def test_a_shadowed_logo_stays_inside_the_limits(self):
-        # The logo is drawn 66 px high (120 less the 27 px margin twice), 264 px wide, then the margin is added.
-        self.assertEqual((318, 120, 6), self.render("wide.svg", WIDE_SVG, "--shadow"))
+    def test_a_shadow_goes_outside_the_logo_and_is_named_in_the_png(self):
+        # The logo keeps its 360 x 90 and the 27 px margin goes around it; the PNG says how wide the margin is.
+        self.assertEqual((414, 144, 6), self.render("wide.svg", WIDE_SVG, "--shadow"))
+        self.assertIn(b"tEXt" + logo.SHADOW_KEY + b"\x0027", (self.icons / "com.example.app.png").read_bytes()[:200])
 
-    def test_a_shadowed_square_logo_keeps_the_full_height(self):
-        self.assertEqual((120, 120, 6), self.render("square.svg", SQUARE_SVG, "--shadow"))
+    def test_without_a_shadow_the_png_names_no_margin(self):
+        self.render("wide.svg", WIDE_SVG)
+        self.assertNotIn(logo.SHADOW_KEY, (self.icons / "com.example.app.png").read_bytes())
 
     def test_fill_renders_in_the_one_colour(self):
         self.assertEqual((120, 120, 6), self.render("square.svg", SQUARE_SVG, "--fill", "#FFFFFF"))
@@ -138,12 +140,18 @@ class ShadowTest(unittest.TestCase):
         self.assertIn("0 0 0 0.85 0", svg)
         self.assertLess(svg.index('filter="url(#shadow)"'), svg.rindex("<image"), "the shadow is drawn first")
 
+    def test_the_margin_chunk_follows_ihdr(self):
+        png = logo.PNG_SIGNATURE + b"\x00\x00\x00\x0dIHDR" + struct.pack(">II", 4, 2) + b"\x08\x06\x00\x00\x00" + b"CRC!"
+        out = logo.with_margin_chunk(png + b"rest", 27)
+        self.assertEqual(png, out[:len(png)])
+        self.assertEqual(b"tEXt" + logo.SHADOW_KEY + b"\x0027", out[len(png) + 4:len(png) + 8 + len(logo.SHADOW_KEY) + 3])
+        self.assertTrue(out.endswith(b"rest"))
+
     def test_shadow_settings_out_of_range_are_refused(self):
         with tempfile.TemporaryDirectory() as tmp:
             source = Path(tmp) / "logo.svg"
             source.write_text(WIDE_SVG)
-            for extra in (["--shadow-blur", "0"], ["--shadow-blur", "31"], ["--shadow-opacity", "0"],
-                          ["--shadow", "--height", "40"]):
+            for extra in (["--shadow-blur", "0"], ["--shadow-blur", "31"], ["--shadow-opacity", "0"]):
                 with self.subTest(extra=extra):
                     result = run(str(source), "com.example.app", "--out", str(Path(tmp) / "icons"), *extra)
                     self.assertEqual(2, result.returncode)

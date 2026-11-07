@@ -11,8 +11,10 @@ Usage:
 The logo is rendered with its transparency kept, `--height` px high (120 by default); a logo that would then be
 wider than `--max-width` (360) is rendered at that width instead, a little lower. `--fill` paints every coloured
 part of an SVG in one colour, for a dark wordmark that would vanish on a dark tile. `--shadow` bakes a soft dark
-shadow under the logo, for a logo drawn with no card (tile_style "logo") over a light wallpaper: the PNG gets a
-transparent margin for it and stays inside --height and --max-width, so the launcher draws it at no extra cost.
+shadow under the logo, for a logo drawn with no card (tile_style "logo") over a light wallpaper. The logo keeps
+the size it has without the shadow; the shadow sits in a transparent margin around it, outside --height and
+--max-width, and the PNG names that margin in a tEXt chunk (SHADOW_KEY) so the launcher sizes the logo, not the
+margin. The launcher draws it at no extra cost.
 The file goes to
 `--out` (work/theme-ref/icons by default, which git ignores) as <package>.png, the name tools/theme.sh and the
 launcher take.
@@ -33,6 +35,7 @@ import struct
 import subprocess
 import sys
 import tempfile
+import zlib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,6 +45,8 @@ PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+")
 COLOUR = re.compile(r"#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6}")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 SHADOW_DROP = 3   # px the shadow sits below the logo
+# The tEXt keyword that tells ThemeIcons how wide the shadow's margin is, in px of the PNG.
+SHADOW_KEY = b"cleanyourtv-shadow-margin"
 
 
 def png_size(data):
@@ -100,6 +105,14 @@ def with_shadow(data, blur, opacity, dy):
             f'<image x="{margin}" y="{margin}" {image}/></svg>')
 
 
+def with_margin_chunk(data, margin):
+    """The PNG with a tEXt chunk right after IHDR naming the shadow's margin, for ThemeIcons."""
+    body = SHADOW_KEY + b"\x00" + str(margin).encode("ascii")
+    chunk = struct.pack(">I", len(body)) + b"tEXt" + body + struct.pack(">I", zlib.crc32(b"tEXt" + body) & 0xFFFFFFFF)
+    ihdr_end = 8 + 4 + 4 + 13 + 4
+    return data[:ihdr_end] + chunk + data[ihdr_end:]
+
+
 def render(rsvg, svg_path, out_path, height, max_width):
     """Renders at `height`; if that is wider than `max_width`, again at that width. Returns (width, height)."""
     for size_args in (["-h", str(height)], ["-w", str(max_width)]):
@@ -139,10 +152,6 @@ def main(argv=None):
         print("--shadow-blur takes 1 to 30 px and --shadow-opacity 0.1 to 1. Nothing was written.", file=sys.stderr)
         return 2
     margin = shadow_margin(args.shadow_blur, SHADOW_DROP) if args.shadow else 0
-    if args.shadow and (args.height <= 2 * margin or args.max_width <= 2 * margin):
-        print(f"--height and --max-width must leave room for the shadow's {margin} px margin. Nothing was written.",
-              file=sys.stderr)
-        return 2
     suffix = args.source.suffix.lower()
     if suffix not in (".svg", ".png") or not args.source.is_file():
         print(f"{args.source} is not an .svg or .png file. Nothing was written.", file=sys.stderr)
@@ -173,19 +182,19 @@ def main(argv=None):
         svg_path = Path(tmp) / "logo.svg"
         svg_path.write_text(svg, encoding="utf-8")
         try:
-            width, height = render(rsvg, svg_path, out_path, args.height - 2 * margin, args.max_width - 2 * margin)
+            width, height = render(rsvg, svg_path, out_path, args.height, args.max_width)
             if args.shadow:
                 shadowed = Path(tmp) / "shadow.svg"
                 shadowed.write_text(with_shadow(out_path.read_bytes(), args.shadow_blur, args.shadow_opacity,
                                                 SHADOW_DROP), encoding="utf-8")
                 subprocess.run([rsvg, "-f", "png", "-o", str(out_path), str(shadowed)], check=True, capture_output=True)
-                width, height = png_size(out_path.read_bytes())
+                out_path.write_bytes(with_margin_chunk(out_path.read_bytes(), margin))
         except (subprocess.CalledProcessError, ValueError) as error:
             detail = getattr(error, "stderr", b"") or b""
             print(f"rsvg-convert failed for {args.source}: {detail.decode(errors='replace').strip() or error}",
                   file=sys.stderr)
             return 1
-    print(f"{out_path} {width}x{height}")
+    print(f"{out_path} {width}x{height}" + (f" + {margin} px shadow margin" if margin else ""))
     return 0
 
 

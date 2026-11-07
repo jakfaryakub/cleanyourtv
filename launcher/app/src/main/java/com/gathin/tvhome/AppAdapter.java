@@ -515,7 +515,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
-        Bitmap logo = e.logo != null ? logoFor(e.logo, h) : null;
+        ThemeIcons.Logo logo = e.logo != null ? logoFor(e.logo, h) : null;
         // tile_style logo: an app tile has no card. A module card stays a card: its banner is the card.
         boolean bare = logoTiles && e.kind != Entry.CARD;
         // Every tile in a logo row dims, a module card's art included, so the row reads as one.
@@ -734,7 +734,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
      * The logo for this tile's box, measured from the tile's real size (the card's layout params) at its focus
      * zoom, so it stays sharp when the tile grows; ThemeIcons keys its cache on that size.
      */
-    private Bitmap logoFor(File file, Holder h) {
+    private ThemeIcons.Logo logoFor(File file, Holder h) {
         ViewGroup.LayoutParams lp = h.card.getLayoutParams();
         if (lp == null || lp.width <= 0 || lp.height <= 0) return null;
         int[] box = logoBox(lp.width, lp.height, focusScale());
@@ -746,14 +746,25 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return new int[]{Math.round(tileW * LOGO_WIDTH_SHARE * zoom), Math.round(tileH * LOGO_HEIGHT_SHARE * zoom)};
     }
 
+    /**
+     * The banner view's padding {x, y} for a logo: the margins logoBox leaves, less the logo's shadow margin as it
+     * is drawn, so the logo itself fills the box and its shadow spills into the margins around it.
+     */
+    static int[] logoPadding(int tileW, int tileH, int contentW, int contentH, int margin) {
+        float boxW = tileW * LOGO_WIDTH_SHARE, boxH = tileH * LOGO_HEIGHT_SHARE;
+        // FIT_CENTER draws the logo at the scale that fits it in the box, and its margin at the same scale.
+        float drawn = margin * Math.min(boxW / contentW, boxH / contentH);
+        int padX = Math.round((tileW - boxW) / 2f - drawn), padY = Math.round((tileH - boxH) / 2f - drawn);
+        return new int[]{Math.max(0, padX), Math.max(0, padY)};
+    }
+
     /** Draws the logo centred in the banner view, inside the same margins logoBox leaves. */
-    private void showLogo(Holder h, Bitmap logo) {
+    private void showLogo(Holder h, ThemeIcons.Logo logo) {
         ViewGroup.LayoutParams lp = h.card.getLayoutParams();
-        int padX = Math.round(lp.width * (1f - LOGO_WIDTH_SHARE) / 2f);
-        int padY = Math.round(lp.height * (1f - LOGO_HEIGHT_SHARE) / 2f);
+        int[] pad = logoPadding(lp.width, lp.height, logo.contentWidth(), logo.contentHeight(), logo.margin);
         h.banner.setScaleType(ImageView.ScaleType.FIT_CENTER);
-        h.banner.setPadding(padX, padY, padX, padY);
-        h.banner.setImageBitmap(logo);
+        h.banner.setPadding(pad[0], pad[1], pad[0], pad[1]);
+        h.banner.setImageBitmap(logo.bitmap);
         h.banner.setVisibility(View.VISIBLE);
         h.icon.setVisibility(View.GONE);
         h.label.setVisibility(View.GONE);
@@ -788,7 +799,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     }
 
     /** The logo if the theme has one for this app, else the app's name as a white wordmark in the theme font. */
-    private void bindBare(Holder h, Entry e, Bitmap logo) {
+    private void bindBare(Holder h, Entry e, ThemeIcons.Logo logo) {
         h.icon.setImageDrawable(null);
         h.icon.setVisibility(View.GONE);
         if (logo != null) {

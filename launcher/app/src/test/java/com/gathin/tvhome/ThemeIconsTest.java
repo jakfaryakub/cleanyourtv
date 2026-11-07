@@ -57,6 +57,58 @@ public class ThemeIconsTest {
         assertFalse(ThemeIcons.endsWithIend(null));
     }
 
+    /** A PNG start as tools/logo.py --shadow writes it: signature, IHDR, then the margin's tEXt chunk. */
+    private static byte[] pngWithMargin(String text) {
+        byte[] sig = {(byte) 0x89, 'P', 'N', 'G', '\r', '\n', 0x1A, '\n'};
+        byte[] ihdr = chunk("IHDR", new byte[13]);
+        byte[] t = chunk("tEXt", text.getBytes(java.nio.charset.StandardCharsets.ISO_8859_1));
+        byte[] idat = chunk("IDAT", new byte[4]);
+        byte[] out = new byte[sig.length + ihdr.length + t.length + idat.length];
+        System.arraycopy(sig, 0, out, 0, sig.length);
+        System.arraycopy(ihdr, 0, out, sig.length, ihdr.length);
+        System.arraycopy(t, 0, out, sig.length + ihdr.length, t.length);
+        System.arraycopy(idat, 0, out, sig.length + ihdr.length + t.length, idat.length);
+        return out;
+    }
+
+    private static byte[] chunk(String type, byte[] body) {
+        byte[] c = new byte[12 + body.length];
+        c[0] = (byte) (body.length >>> 24); c[1] = (byte) (body.length >>> 16);
+        c[2] = (byte) (body.length >>> 8); c[3] = (byte) body.length;
+        System.arraycopy(type.getBytes(java.nio.charset.StandardCharsets.US_ASCII), 0, c, 4, 4);
+        System.arraycopy(body, 0, c, 8, body.length);
+        return c;   // the CRC is not checked
+    }
+
+    @Test public void theShadowMarginIsReadFromItsChunk() {
+        assertEquals(27, ThemeIcons.shadowMargin(pngWithMargin(ThemeIcons.SHADOW_KEY + "\u000027")));
+        assertEquals(0, ThemeIcons.shadowMargin(pngWithMargin("Software\u0000rsvg")));
+        assertEquals(0, ThemeIcons.shadowMargin(pngWithMargin(ThemeIcons.SHADOW_KEY + "\u0000lots")));
+        assertEquals(0, ThemeIcons.shadowMargin(pngWithMargin(ThemeIcons.SHADOW_KEY + "\u00009999")));
+        assertEquals(0, ThemeIcons.shadowMargin(new byte[0]));
+        assertEquals(0, ThemeIcons.shadowMargin(null));
+    }
+
+    @Test public void aMarginMustLeaveSomeLogo() {
+        assertEquals(27, ThemeIcons.usableMargin(27, 414, 144));
+        assertEquals(0, ThemeIcons.usableMargin(72, 414, 144));
+        assertEquals(0, ThemeIcons.usableMargin(-1, 414, 144));
+    }
+
+    @Test public void theLogoNotItsMarginFitsTheBox() {
+        // 360 x 90 logo in a 27 px margin, box 250 x 85: the logo is scaled to 250 x 62 and its margin to 19 px.
+        assertArrayEquals(new int[]{288, 100}, ThemeIcons.fullSize(414, 144, 27, 250, 85));
+        assertArrayEquals(new int[]{250, 62}, ThemeIcons.fullSize(360, 90, 0, 250, 85));
+    }
+
+    @Test public void theShadowSpillsIntoTheTilesMargins() {
+        // A 280 x 157 tile leaves 28 px and 39 px around its 224 x 78.5 box; a 27 px margin on a 360 px logo drawn
+        // 224 px wide is about 17 px, taken off the padding.
+        assertArrayEquals(new int[]{28, 39}, AppAdapter.logoPadding(280, 157, 360, 90, 0));
+        assertArrayEquals(new int[]{11, 22}, AppAdapter.logoPadding(280, 157, 360, 90, 27));
+        assertArrayEquals(new int[]{0, 0}, AppAdapter.logoPadding(280, 157, 10, 10, 200));
+    }
+
     @Test public void theBoxSizeIsPartOfTheCacheKey() {
         String small = ThemeIcons.key("/t/icons/a.b.png", 10, 1, 250, 85);
         assertNotEquals(small, ThemeIcons.key("/t/icons/a.b.png", 10, 1, 300, 85));
