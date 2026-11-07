@@ -54,6 +54,14 @@ final class Prayer {
         return SUBUH;
     }
 
+    /** True when no time of the day is still to come at this minute: the line should show tomorrow. */
+    static boolean allPassed(int[] times, int nowMinute) {
+        for (int t : times) {
+            if (t != NONE && t > nowMinute) return false;
+        }
+        return true;
+    }
+
     private static int minute(double hours, int extra) {
         if (Double.isNaN(hours)) return NONE;
         return (int) Math.ceil(hours * 60 + extra - 1e-9);

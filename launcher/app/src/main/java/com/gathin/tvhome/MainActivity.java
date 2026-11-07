@@ -48,10 +48,13 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
+import android.text.style.TypefaceSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -80,6 +83,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -161,6 +166,15 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean appGlow;
     /** focus_frame: false keeps the glass hidden, so the focused tile is marked by its zoom (and opacity) alone. */
     private boolean focusFrame = true;
+    /** prayer_times: the line of today's five times under the clock, null when the key is off or has no place. */
+    private TextView prayerLine;
+    private double prayerLat, prayerLon;
+    private int prayerIhtiyat;
+    private LocalDate prayerDay;
+    /** The prayer drawn in bold, or -1 before the line is first drawn. */
+    private int prayerNext = -1;
+    /** Redraws the prayer line at the minute the next prayer comes, or at midnight. */
+    private final Runnable prayerTick = this::updatePrayerLine;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
     private String glowStyle;
     /** config.xml cinematic_white_focus: the cinematic shelf keeps the white highlight. */
@@ -609,6 +623,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             date.setTextSize(11f);
             lunarDate.setTextSize(11f);
             date.setPadding(0, (int) (4 * density), 0, 0);
+        }
+        if (cfg.clockSize > 0) applyClockSize(cfg.clockSize);
+        if (Config.HEADER_END.equals(cfg.headerPosition)) moveHeaderToEnd();
+        if (cfg.prayerTimes && !Double.isNaN(cfg.latitude) && !Double.isNaN(cfg.longitude)) {
+            setUpPrayerLine(cfg, Config.HEADER_END.equals(cfg.headerPosition));
         }
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
@@ -1143,6 +1162,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         sky.update();
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
+        updatePrayerLine();
         if (festive && lamp != null) {
             lamp.start();
             LocalDate today = LocalDate.now();
@@ -1321,6 +1341,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        handler.removeCallbacks(prayerTick);
         handler.removeCallbacks(openWhenOnline);
         startPending = null;   // leaving Home before the network came back: the boot's app stays closed
         stopStats();
@@ -2535,6 +2556,124 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             textLp.gravity = ((TextView) text).getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK;
             text.setLayoutParams(textLp);
         }
+    }
+
+    /** clock_size: the clock at this many sp, and the date, the AM/PM mark and the divider at the same ratio. */
+    private void applyClockSize(int sp) {
+        float ratio = sp / 52f;
+        ((TextView) findViewById(R.id.clock)).setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        TextView date = findViewById(R.id.date);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(10f, date.getTextSize() / getResources().getDisplayMetrics().scaledDensity * ratio));
+        TextView ampm = findViewById(R.id.ampm);
+        ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(9f, 15f * ratio));
+        View divider = findViewById(R.id.clockDivider);
+        ViewGroup.LayoutParams lp = divider.getLayoutParams();
+        lp.height = Math.round(26 * density * ratio);
+        divider.setLayoutParams(lp);
+    }
+
+    /**
+     * header_position end: the clock's row at the right, beside the buttons, with the date to the clock's left, as
+     * the Hebrew menu bar puts it. The buttons stay on the right edge, level with the clock.
+     */
+    private void moveHeaderToEnd() {
+        TextView date = findViewById(R.id.date);
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+        View divider = findViewById(R.id.clockDivider);
+        LinearLayout clockRow = (LinearLayout) findViewById(R.id.clock).getParent();
+        if (dateColumn.getParent() == clockRow) {
+            // Date | clock: the date column first, its own width, then the divider, the clock and AM/PM.
+            clockRow.removeView(dateColumn);
+            clockRow.removeView(divider);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dateColumn.getLayoutParams();
+            lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            lp.weight = 0;
+            clockRow.addView(dateColumn, 0, lp);
+            clockRow.addView(divider, 1);
+        }
+        clockRow.setGravity(Gravity.RIGHT | Gravity.BOTTOM);
+        for (int i = 0; i < dateColumn.getChildCount(); i++) {
+            View line = dateColumn.getChildAt(i);
+            if (line instanceof TextView) ((TextView) line).setGravity(Gravity.RIGHT);
+        }
+        TextView greeting = findViewById(R.id.greeting);
+        greeting.setGravity(Gravity.RIGHT);
+    }
+
+    /** prayer_times: one line under the header, outside leftBlock so the buttons stay level with the clock. */
+    private void setUpPrayerLine(Config cfg, boolean end) {
+        prayerLat = cfg.latitude;
+        prayerLon = cfg.longitude;
+        prayerIhtiyat = cfg.prayerIhtiyat;
+        TextView line = new TextView(this);
+        line.setId(View.generateViewId());
+        line.setSingleLine(true);
+        line.setFocusable(false);
+        line.setIncludeFontPadding(false);
+        line.setTextColor(0xB3FFFFFF);
+        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        line.setLetterSpacing(0.02f);
+        line.setTypeface(UiFont.get(this, R.string.font_regular));
+        View stats = findViewById(R.id.stats);
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.addRule(RelativeLayout.BELOW, showStats ? R.id.stats : R.id.leftBlock);
+        if (end) lp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        else lp.addRule(RelativeLayout.ALIGN_START, R.id.leftBlock);
+        lp.topMargin = Math.round(10 * density);
+        ((ViewGroup) stats.getParent()).addView(line, lp);
+        prayerLine = line;
+    }
+
+    /** Draws today's times with the next one bold and white, and wakes again when that changes. */
+    private void updatePrayerLine() {
+        if (prayerLine == null) return;
+        handler.removeCallbacks(prayerTick);
+        LocalTime now = LocalTime.now();
+        int minute = now.getHour() * 60 + now.getMinute();
+        LocalDate today = LocalDate.now();
+        ZoneId zone = ZoneId.systemDefault();
+        int[] times = Prayer.times(today, prayerLat, prayerLon, zone, prayerIhtiyat);
+        LocalDate shown = today;
+        // Once Isya has passed the line shows tomorrow, so the bold Subuh is the one still to come.
+        if (Prayer.allPassed(times, minute)) {
+            shown = today.plusDays(1);
+            times = Prayer.times(shown, prayerLat, prayerLon, zone, prayerIhtiyat);
+        }
+        int next = shown.equals(today) ? Prayer.next(times, minute) : Prayer.SUBUH;
+        if (next != prayerNext || !shown.equals(prayerDay)) {
+            prayerNext = next;
+            prayerDay = shown;
+            prayerLine.setText(prayerText(times, next));
+        }
+        // The next change: that prayer's minute today, or midnight once tomorrow's line is up.
+        int target = shown.equals(today) ? times[next] : 24 * 60;
+        long delay = ((target - minute) * 60L - now.getSecond()) * 1000L + 500;
+        handler.postDelayed(prayerTick, Math.max(1000L, delay));
+    }
+
+    private CharSequence prayerText(int[] times, int next) {
+        String[] names = getResources().getStringArray(R.array.prayer_names);
+        SpannableStringBuilder text = new SpannableStringBuilder();
+        for (int i = 0; i < Prayer.COUNT; i++) {
+            if (times[i] == Prayer.NONE) continue;
+            if (text.length() > 0) text.append("\u2003");
+            int start = text.length();
+            text.append(names[i]).append(' ').append(String.format(Locale.ROOT, "%02d:%02d", times[i] / 60, times[i] % 60));
+            if (i == next) {
+                text.setSpan(new ForegroundColorSpan(Color.WHITE), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                text.setSpan(boldSpan(), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        return text;
+    }
+
+    /** The theme font at weight 700 where it has one (a variable font), else the platform's bold. */
+    private Object boldSpan() {
+        ThemeFont font = ThemeFont.current();
+        android.graphics.Typeface bold = font != null ? font.get(700) : null;
+        if (bold != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return new TypefaceSpan(bold);
+        return new StyleSpan(android.graphics.Typeface.BOLD);
     }
 
     /** Centre the one-row header when the greeting and extra date lines are absent (#2265). */

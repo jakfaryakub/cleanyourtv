@@ -158,4 +158,12 @@
     <string name="clock_format_system">System</string>
     <string name="clock_format_12">12-hour</string>
     <string name="clock_format_24">24-hour</string>
+    <!-- prayer_times: the five daily prayers, in Prayer's order. Indonesian names, the place Kemenag's times are for. -->
+    <string-array name="prayer_names" translatable="false">
+        <item>Subuh</item>
+        <item>Dzuhur</item>
+        <item>Ashar</item>
+        <item>Maghrib</item>
+        <item>Isya</item>
+    </string-array>
 </resources>

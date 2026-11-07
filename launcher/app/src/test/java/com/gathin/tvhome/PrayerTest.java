@@ -73,6 +73,14 @@ public class PrayerTest {
         assertEquals(Prayer.SUBUH, Prayer.next(t, 19 * 60 + 29));   // after Isya: tomorrow's Subuh
     }
 
+    @Test public void afterIsyaTheDayIsDone() {
+        int[] t = {4 * 60 + 7, 11 * 60 + 40, 14 * 60 + 58, 17 * 60 + 50, 19 * 60 + 2};
+        assertTrue(Prayer.allPassed(t, 19 * 60 + 22));
+        assertTrue(Prayer.allPassed(t, 19 * 60 + 2));
+        assertEquals(false, Prayer.allPassed(t, 19 * 60 + 1));
+        assertEquals(false, Prayer.allPassed(t, 0));
+    }
+
     @Test public void aTimeTheSunNeverReachesIsNoneAndSkipped() {
         // Oslo in June: the sun never sinks 18 degrees below the horizon, so there is no Isya (nor Subuh).
         int[] oslo = Prayer.times(LocalDate.of(2026, 6, 21), 59.91, 10.75, ZoneId.of("Europe/Oslo"), 2);
