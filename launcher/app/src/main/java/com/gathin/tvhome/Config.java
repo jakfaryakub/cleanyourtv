@@ -725,12 +725,12 @@ final class Config {
             focusScale = focusScale(json.opt("focus_scale"), focusScale);
             unfocusedOpacity = unfocusedOpacity(json.opt("unfocused_opacity"), unfocusedOpacity);
             headerPosition = string(json, "header_position", headerPosition);
-            clockSize = clockSize(json.opt("clock_size"), clockSize);
+            clockSize = integer(json, "clock_size", clockSize, 24, 72);
             prayerTimes = bool(json, "prayer_times", prayerTimes);
             latitude = coordinate(json.opt("prayer_latitude"), 90, latitude);
             longitude = coordinate(json.opt("prayer_longitude"), 180, longitude);
             prayerIhtiyat = integer(json, "prayer_ihtiyat", prayerIhtiyat, 0, 5);
-            topButtonSize = topButtonSize(json.opt("top_button_size"), topButtonSize);
+            topButtonSize = integer(json, "top_button_size", topButtonSize, 28, 42);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -821,20 +821,6 @@ final class Config {
     /** A known header_position, or start (the default) for anything else. */
     static String headerPosition(String value) {
         return value != null && HEADER_END.equalsIgnoreCase(value.trim()) ? HEADER_END : HEADER_START;
-    }
-
-    /** top_button_size: a whole number of dp from 28 to 42, or the fallback for anything else. */
-    static int topButtonSize(Object v, int fallback) {
-        if (!(v instanceof Number)) return fallback;
-        double d = ((Number) v).doubleValue();
-        return d >= 28 && d <= 42 && d == Math.rint(d) ? (int) d : fallback;
-    }
-
-    /** clock_size: a whole number of sp from 24 to 72, or the fallback for anything else. */
-    static int clockSize(Object v, int fallback) {
-        if (!(v instanceof Number)) return fallback;
-        double d = ((Number) v).doubleValue();
-        return d >= 24 && d <= 72 && d == Math.rint(d) ? (int) d : fallback;
     }
 
     /** A latitude or longitude from config.json: a number within +-limit degrees, or the fallback. */
