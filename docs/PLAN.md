@@ -20,7 +20,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps passes; idle CPU 20%, pause-when-idle proposed (4a.1) |
-| 4a.1 | Pause the animation after N seconds with no key (proposed key `wallpaper_pause_seconds`) | proposed, not built |
+| 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
 
 ## Phase 1b.1 result
@@ -269,6 +269,39 @@ Where the code changes go:
   `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts), the experiment's keys merged into its
   `config.json`, and the local `icons/`. Rebuild the copy whenever the repo theme changes; `theme.sh` sends `icons/`
   once 1b.1 adds it.
+
+## Phase 4a.1 result
+
+**The screensaver, read first (read-only, T6C).** `screensaver_enabled` 1, `screensaver_activate_on_sleep` 1,
+component `com.gathin.tvhome/.ClockDream`, `screen_off_timeout` 600,000 ms, `sleep_timeout` 1,139,000 ms,
+`attentive_timeout` -1, stay-on off. So the launcher's clock dream starts after **10 minutes** without input,
+and the TV sleeps after about 19. The theme's own `home_idle_clock_minutes` is 0 (off).
+
+- The dream was started once with `Somnambulator`. Home's activity was then `STOPPED`, not visible, so `onStop`
+  already pauses the animation after 10 minutes.
+- The launcher process still used about 20% CPU while dreaming. That is `ClockDream`, which runs in the same
+  process, not the wallpaper.
+- So a 300 s pause still saves 5 of those 10 minutes of animation, and the experiment theme uses 300.
+
+**`wallpaper_pause_seconds`** (0 never, by default; 1-29 count as 30, more than 3600 as 3600). After that many
+seconds with no key, `WallpaperPlayer.setPaused(true)` holds the animation on its frame. Any key, or Home, plays it
+again, before `RowsAutohide` sees the key: the key is not taken, so on a hidden row it still only brings the row back.
+`onStart` resets the wait. `WallpaperPause` holds the timer, unit tested. APK 600,801 B, lint 0 errors.
+
+On the TV, with 30 s for the test:
+
+| | Launcher CPU, `top` 10 s |
+|---|---|
+| Animation playing | 19.8% |
+| After the pause (log: `animation paused`) | 0.1% |
+| After one key | 19.8% |
+
+Two screenshots 2 s apart during the pause were identical, and after the key they differed again.
+
+**Clock over the bright eye, `wallpaper_dim`** with `header_shadow` on: screenshots at 0, 15 and 25
+(`shots/4a1-dim*.png`, not committed). The colour filter works on the animation. Mean brightness of the wallpaper
+band: 129 at 0, 110 at 15, 97 at 25. In the header the clock gains a little contrast at 15 and more at 25; the
+owner picks. The theme stays at 0 until then.
 
 ## Phase 4a part 2 result
 
