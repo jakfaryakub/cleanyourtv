@@ -1360,6 +1360,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.getRecycledViewPool().clear();
         heroArtCache.clear();
         heroArtKey = null;
+        ThemeIcons.clear();
         wallpaperPlayer.releaseForMemoryPressure();
         tileRefresh.invalidate();
     }

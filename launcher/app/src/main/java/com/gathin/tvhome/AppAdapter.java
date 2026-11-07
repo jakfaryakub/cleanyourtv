@@ -34,6 +34,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -80,6 +81,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int ambient;
         /** uniform_tiles card fill, top and bottom colour; null until sampled from the icon. */
         int[] backdrop;
+        /** app_logos: the theme's icons/<package>.png, drawn instead of the banner or icon when it decodes. */
+        File logo;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this(APP, label, component, banner, icon, null, 0);
@@ -218,6 +221,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final Map<String, String> appLabels, appBanners;
     /** Every app tile is its icon on a card tinted from that icon, never its banner (config.xml, uniform_tiles). */
     private final boolean uniformTiles;
+    /** app_logos: each app's logo from the theme's icons/ folder, where the theme has one. */
+    private final boolean appLogos;
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
@@ -240,6 +245,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
+        this.appLogos = cfg.appLogos;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -283,6 +289,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // Some system apps declare two leanback entry points under one name (Sony's Timers & Clock on the
         // BRAVIA VU31), which would show as two identical tiles: keep the first per package and label.
         Set<String> seen = new HashSet<>();
+        File logoDir = appLogos ? Config.dir(ctx) : null;
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
@@ -305,11 +312,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             // The icon is only drawn (and sampled for the glow) when there is no banner, so a tile with a
             // banner skips loading and decoding it.
             Drawable icon = banner == null ? ri.loadIcon(pm) : null;
-            if (card != null) {
-                fresh.add(new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent));
-            } else {
-                fresh.add(new Entry(label, component, banner, icon));
-            }
+            Entry entry = card != null ? new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent)
+                    : new Entry(label, component, banner, icon);
+            // The banner or icon above stays loaded: a logo that does not decode falls back to it in bind.
+            if (logoDir != null && card == null) entry.logo = ThemeIcons.file(logoDir, pkg);
+            fresh.add(entry);
         }
         Collections.sort(fresh, (a, b) -> {
             // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
@@ -490,17 +497,23 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
-        h.card.setBackground(e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
-        if (uniformTiles && e.banner == null) {
+        Bitmap logo = e.logo != null ? logoFor(e.logo, h) : null;
+        h.card.setBackground(logo == null && e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
+        // A logo sits on the dark card (tile_bg); uniform_tiles' tinted fill is for the icon it replaces.
+        if (logo == null && uniformTiles && e.banner == null) {
             if (e.backdrop == null) e.backdrop = backdrop(e.icon, ambientColorAt(position));
             h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, e.backdrop));
         }
-        if (e.banner != null) {
+        if (logo != null) {
+            showLogo(h, logo);
+        } else if (e.banner != null) {
+            clearLogo(h);
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);
             h.icon.setVisibility(View.GONE);
             h.label.setVisibility(View.GONE);
         } else {
+            clearLogo(h);
             h.banner.setImageDrawable(null);
             h.banner.setVisibility(View.GONE);
             h.icon.setImageDrawable(e.icon);
@@ -673,6 +686,45 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         if (position < 0 || position >= items.size()) return null;
         Entry e = items.get(position);
         return e.banner != null ? e.banner : e.icon;
+    }
+
+    /** Share of the tile a logo may cover, across and down; the rest is margin on the card. */
+    static final float LOGO_WIDTH_SHARE = 0.8f, LOGO_HEIGHT_SHARE = 0.5f;
+
+    /**
+     * The logo for this tile's box, measured from the tile's real size (the card's layout params) at its focus
+     * zoom, so it stays sharp when the tile grows; ThemeIcons keys its cache on that size.
+     */
+    private Bitmap logoFor(File file, Holder h) {
+        ViewGroup.LayoutParams lp = h.card.getLayoutParams();
+        if (lp == null || lp.width <= 0 || lp.height <= 0) return null;
+        int[] box = logoBox(lp.width, lp.height, focusScale());
+        return ThemeIcons.get(file, box[0], box[1]);
+    }
+
+    /** The logo's box inside a tile of this size, at this focus zoom, in px. */
+    static int[] logoBox(int tileW, int tileH, float zoom) {
+        return new int[]{Math.round(tileW * LOGO_WIDTH_SHARE * zoom), Math.round(tileH * LOGO_HEIGHT_SHARE * zoom)};
+    }
+
+    /** Draws the logo centred in the banner view, inside the same margins logoBox leaves. */
+    private void showLogo(Holder h, Bitmap logo) {
+        ViewGroup.LayoutParams lp = h.card.getLayoutParams();
+        int padX = Math.round(lp.width * (1f - LOGO_WIDTH_SHARE) / 2f);
+        int padY = Math.round(lp.height * (1f - LOGO_HEIGHT_SHARE) / 2f);
+        h.banner.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        h.banner.setPadding(padX, padY, padX, padY);
+        h.banner.setImageBitmap(logo);
+        h.banner.setVisibility(View.VISIBLE);
+        h.icon.setVisibility(View.GONE);
+        h.label.setVisibility(View.GONE);
+    }
+
+    /** Puts the banner view back as item_app.xml has it, for a recycled tile that showed a logo. */
+    private static void clearLogo(Holder h) {
+        if (h.banner.getScaleType() == ImageView.ScaleType.CENTER_CROP && h.banner.getPaddingLeft() == 0) return;
+        h.banner.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        h.banner.setPadding(0, 0, 0, 0);
     }
 
     float focusScale() {

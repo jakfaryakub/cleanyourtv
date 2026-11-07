@@ -279,6 +279,8 @@ final class Config {
     final String font;
     /** Multiplies every sp text size (config.json font_scale, 0.85-1.25); 1 leaves the sizes as they are. */
     final float fontScale;
+    /** Each app's logo from the theme's icons/<package>.png instead of its banner or icon (config.json app_logos). */
+    final boolean appLogos;
     /** Every app in the dock's row, which scrolls sideways, and no grid below it (config.xml, single_row); needs dock_row. */
     final boolean singleRow;
     /** With single_row, the band runs behind every app in the row, not only the dock apps (config.xml, dock_band_all). */
@@ -299,8 +301,9 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   String font, float fontScale) {
+                   String font, float fontScale, boolean appLogos) {
         this.font = font;
+        this.appLogos = appLogos;
         this.fontScale = fontScale;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
@@ -550,6 +553,7 @@ final class Config {
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
         String font = "";
         float fontScale = 1f;
+        boolean appLogos = false;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -668,6 +672,7 @@ final class Config {
             glassStyle = string(json, "glass_style", glassStyle);
             font = fontName(string(json, "font", font));
             fontScale = fontScale(json.opt("font_scale"), fontScale);
+            appLogos = bool(json, "app_logos", appLogos);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -732,7 +737,7 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font, fontScale);
+                font, fontScale, appLogos);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
