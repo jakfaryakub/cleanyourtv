@@ -159,6 +159,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean ambientGlow;
     /** config.xml app_glow: the highlight takes the focused app's colour on every tile. */
     private boolean appGlow;
+    /** focus_frame: false keeps the glass hidden, so the focused tile is marked by its zoom (and opacity) alone. */
+    private boolean focusFrame = true;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
     private String glowStyle;
     /** config.xml cinematic_white_focus: the cinematic shelf keeps the white highlight. */
@@ -524,6 +526,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambientGlow = cfg.ambientGlow;
         glowSnap = cfg.glowSnap;
         appGlow = cfg.appGlow;
+        focusFrame = cfg.focusFrame;
         if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
@@ -1523,6 +1526,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         orderAtStart = adapter.movableKeys();
         glass.setAccent(REORDER_ACCENT);
         btnReorder.setActivated(true);
+        if (!focusFrame) {
+            // The glass is hidden with focus_frame false: bring it up on the focused tile for the move.
+            View f = getCurrentFocus();
+            if (f != null && f.getId() == R.id.card) onTileFocused(lastFocused, f);
+        }
         return true;
     }
 
@@ -1668,6 +1676,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter.setReordering(false);
         glass.setAccent(festive ? festival.accentColor() : 0);
         btnReorder.setActivated(false);
+        if (!focusFrame) hideGlass();
         List<String> keys = adapter.movableKeys();
         List<String> before = orderAtStart;
         orderAtStart = null;
@@ -1835,42 +1844,45 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean lifted = advancedEffects && !DockSlots.inDockRow(dockRow, singleRow, position, COLUMNS);
         float y = r.exactCenterY() - h / 2f - (lifted ? 4f * density : 0f);
 
-        ViewGroup.LayoutParams lp = glass.getLayoutParams();
-        if (lp.width != (int) w || lp.height != (int) h || card.getWidth() != glassCardW) {
-            lp.width = (int) w;
-            lp.height = (int) h;
-            glass.setLayoutParams(lp);
-            // GlassView draws its slab inset by pad, i.e. exactly over the zoomed tile: same corners as the tile.
-            glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * scale);
-        }
-        glassCardW = card.getWidth();
-        glassCardRect.set(r);
-        glassTargetX = x;
-        glassTargetY = y;
-        // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid (and on the dock with
-        // cinematic_white_focus). app_glow: every tile. In a single row every tile is the dock's kind.
-        boolean coloured = (appGlow || cinematic && !cinematicWhiteFocus && (singleRow || position < COLUMNS)) && !festive;
-        int accent = coloured ? adapter.ambientColorAt(position) : 0;
-        if ((cinematic || appGlow) && !festive && accent != glassAccent) {
-            glassAccent = accent;
-            glass.setAccent(accent);
-        }
-        if (!glassShown) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-            if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
-            else glass.setAlpha(1f);
-            glassShown = true;
-        } else if (!animations) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-        } else {
-            springX.animateToFinalPosition(x - glassScrollShiftX);
-            springY.animateToFinalPosition(y - glassScrollShift);
+        // focus_frame false: no glass, except while reordering, where its blue says which tile moves.
+        if (focusFrame || reordering) {
+            ViewGroup.LayoutParams lp = glass.getLayoutParams();
+            if (lp.width != (int) w || lp.height != (int) h || card.getWidth() != glassCardW) {
+                lp.width = (int) w;
+                lp.height = (int) h;
+                glass.setLayoutParams(lp);
+                // GlassView draws its slab inset by pad, i.e. exactly over the zoomed tile: same corners as the tile.
+                glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * scale);
+            }
+            glassCardW = card.getWidth();
+            glassCardRect.set(r);
+            glassTargetX = x;
+            glassTargetY = y;
+            // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid (and on the dock with
+            // cinematic_white_focus). app_glow: every tile. In a single row every tile is the dock's kind.
+            boolean coloured = (appGlow || cinematic && !cinematicWhiteFocus && (singleRow || position < COLUMNS)) && !festive;
+            int accent = coloured ? adapter.ambientColorAt(position) : 0;
+            if ((cinematic || appGlow) && !festive && accent != glassAccent) {
+                glassAccent = accent;
+                glass.setAccent(accent);
+            }
+            if (!glassShown) {
+                springX.cancel();
+                springY.cancel();
+                glass.setTranslationX(x);
+                glass.setTranslationY(y);
+                if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
+                else glass.setAlpha(1f);
+                glassShown = true;
+            } else if (!animations) {
+                springX.cancel();
+                springY.cancel();
+                glass.setTranslationX(x);
+                glass.setTranslationY(y);
+            } else {
+                springX.animateToFinalPosition(x - glassScrollShiftX);
+                springY.animateToFinalPosition(y - glassScrollShift);
+            }
         }
         View item = (View) card.getParent();
         if (dockRow && (singleRow || position < COLUMNS)) {
@@ -1899,6 +1911,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
+        if (!focusFrame && !reordering) return;   // no glass to fit
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);

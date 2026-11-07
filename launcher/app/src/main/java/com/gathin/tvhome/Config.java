@@ -259,6 +259,10 @@ final class Config {
     static final String TILE_CARD = "card", TILE_LOGO = "logo";
     /** Home's app tiles as cards or as bare logos (config.json tile_style). */
     final String tileStyle;
+    /** The glass highlight around the focused tile (config.json focus_frame); false leaves the zoom alone. */
+    final boolean focusFrame;
+    /** How far the focused tile grows (config.json focus_scale, 1.0-1.3), or 0 for the built-in 1.10 / 1.12. */
+    final float focusScale;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -305,8 +309,11 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   String font, float fontScale, boolean appLogos, String tileStyle) {
+                   String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
+                   float focusScale) {
         this.font = font;
+        this.focusFrame = focusFrame;
+        this.focusScale = focusScale;
         this.tileStyle = tileStyle(tileStyle);
         this.appLogos = appLogos;
         this.fontScale = fontScale;
@@ -560,6 +567,8 @@ final class Config {
         float fontScale = 1f;
         boolean appLogos = false;
         String tileStyle = TILE_CARD;
+        boolean focusFrame = true;
+        float focusScale = 0f;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -680,6 +689,8 @@ final class Config {
             fontScale = fontScale(json.opt("font_scale"), fontScale);
             appLogos = bool(json, "app_logos", appLogos);
             tileStyle = string(json, "tile_style", tileStyle);
+            focusFrame = bool(json, "focus_frame", focusFrame);
+            focusScale = focusScale(json.opt("focus_scale"), focusScale);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -744,7 +755,7 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font, fontScale, appLogos, tileStyle);
+                font, fontScale, appLogos, tileStyle, focusFrame, focusScale);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
@@ -756,6 +767,13 @@ final class Config {
     /** A known tile_style, or card (the default) for anything else. */
     static String tileStyle(String value) {
         return value != null && TILE_LOGO.equalsIgnoreCase(value.trim()) ? TILE_LOGO : TILE_CARD;
+    }
+
+    /** focus_scale: a number from 1.0 (no zoom) to 1.3, or the fallback for anything else. */
+    static float focusScale(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 1f && f <= 1.3f ? f : fallback;
     }
 
     static float fontScale(Object v, float fallback) {
