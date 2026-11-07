@@ -161,6 +161,7 @@ A new key needs one there in the same pull request.
 | `prayer_ihtiyat` | 0 to 5 | Minutes of safety margin added to Subuh, Ashar, Maghrib and Isya before rounding up, as Kemenag does. 2 by default |
 | `top_button_size` | 28 to 42 | The round icon-only top buttons (`icon_only_buttons`) at this many dp, their icons scaled with them; pills that keep a label are unchanged. Unset keeps 42 |
 | `header_shadow` | bool | A soft dark shadow under the clock, the date and the prayer line, so they read over a light wallpaper. `false` by default |
+| `rows_autohide_seconds` | 0 to 3600 | Seconds with no key on Home before the app row fades out, leaving the wallpaper and the header; 1 to 4 count as 5. The first key afterwards only brings the row back, on the tile the focus was on: it does not move the focus or open an app, and Home does the same. Volume and mute keys work over the hidden row. It never hides while tiles are being moved or a menu or dialog is open. With `animations: false` or `reduced_motion` the row goes and comes back at once. 0 (never) by default |
 | `background_color` | `#RRGGBB` | Colour behind everything; black by default |
 | `sky_intensity` | 0 to 100 | Time-of-day backdrop: a dark gradient that follows the clock, 0 hides it (default) |
 | `wallpaper` | bool | Show the theme's picture, `wallpaper.jpg` or its `wallpapers/` collection (`true`), or draw neither (`false`) |

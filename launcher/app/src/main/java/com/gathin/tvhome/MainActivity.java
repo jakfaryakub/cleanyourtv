@@ -175,6 +175,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private int prayerNext = -1;
     /** Redraws the prayer line at the minute the next prayer comes, or at midnight. */
     private final Runnable prayerTick = this::updatePrayerLine;
+    /** rows_autohide_seconds: when the app row fades out and how the first key brings it back; null when off. */
+    private RowsAutohide autohide;
+    private final Runnable autohideTick = this::checkAutohide;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
     private String glowStyle;
     /** config.xml cinematic_white_focus: the cinematic shelf keeps the white highlight. */
@@ -630,6 +633,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             setUpPrayerLine(cfg, Config.HEADER_END.equals(cfg.headerPosition));
         }
         if (cfg.headerShadow) shadowHeader();
+        if (cfg.rowsAutohideSeconds > 0) autohide = new RowsAutohide(cfg.rowsAutohideSeconds, SystemClock.uptimeMillis());
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
         btnVpn = findViewById(R.id.btnVpn);
@@ -1081,6 +1085,13 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLibraryIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
+        if (autohide != null && autohide.hidden()) {
+            // Home on a hidden row only brings it back, as any first key does.
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(true);
+            scheduleAutohide();
+            return;
+        }
         if (gameDay != null && !stopped) gameDay.read();
         grid.scrollToPosition(0);
         lastFocused = 0;
@@ -1165,6 +1176,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         wallpaperPlayer.start();
         handler.postDelayed(minuteTick, MINUTE_MS);
         updatePrayerLine();
+        if (autohide != null) {
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(false);
+            scheduleAutohide();
+        }
         if (festive && lamp != null) {
             lamp.start();
             LocalDate today = LocalDate.now();
@@ -1344,6 +1360,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
         handler.removeCallbacks(prayerTick);
+        if (autohide != null) {
+            handler.removeCallbacks(autohideTick);
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(false);   // an app or the screensaver comes up: Home is whole when it comes back
+        }
         handler.removeCallbacks(openWhenOnline);
         startPending = null;   // leaving Home before the network came back: the boot's app stays closed
         stopStats();
@@ -1453,6 +1474,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (autohide != null) {
+            int took = autohide.onKey(event.getKeyCode(), event.getAction() == KeyEvent.ACTION_DOWN,
+                    SystemClock.uptimeMillis());
+            if (took == RowsAutohide.REVEAL) {
+                showRows(true);
+                return true;
+            }
+            if (took == RowsAutohide.SWALLOW) return true;
+            if (!autohide.hidden()) scheduleAutohide();
+        }
         if (homeIgnoreChannelKeys && RemoteKeys.isChannelKey(event.getKeyCode())) return true;
         // Vendor keys (TCL Netflix button, 4062) never reach the key services, only the focused window, so their
         // "hold:" entries run here too or nowhere. Only while resumed: onPause releases Home's holds, and a DOWN
@@ -2657,6 +2688,46 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int[] ids = {R.id.clock, R.id.ampm, R.id.date, R.id.greeting, R.id.shamsiDate, R.id.lunarDate};
         for (int id : ids) ((TextView) findViewById(id)).setShadowLayer(radius, 0, dy, colour);
         if (prayerLine != null) prayerLine.setShadowLayer(radius, 0, dy, colour);
+    }
+
+    private void scheduleAutohide() {
+        handler.removeCallbacks(autohideTick);
+        if (resumed) handler.postDelayed(autohideTick, autohide.delayMs(SystemClock.uptimeMillis()));
+    }
+
+    /** Hides the row once the wait is over, unless tiles are being moved or a menu or dialog has the remote. */
+    private void checkAutohide() {
+        if (autohide == null || !resumed) return;
+        boolean blocked = reordering || !hasWindowFocus() || openPopup != null || cardPrompt != null
+                || appLibrary != null;
+        if (autohide.hideNow(SystemClock.uptimeMillis(), blocked)) hideRows();
+        else scheduleAutohide();
+    }
+
+    /** The app row (and its focus glass) fades out; the header and the wallpaper stay. Focus stays where it is. */
+    private void hideRows() {
+        if (!animations || reducedMotion) {
+            grid.animate().cancel();
+            grid.setAlpha(0f);
+            if (glassShown) glass.setAlpha(0f);
+            return;
+        }
+        grid.animate().alpha(0f).setDuration(600).start();
+        if (glassShown) glass.animate().alpha(0f).setDuration(600).start();
+    }
+
+    /** The row back, on the tile the focus was on; animated only for a key, and only with animations on. */
+    private void showRows(boolean animate) {
+        if (grid.getAlpha() == 1f) return;
+        if (!animate || !animations || reducedMotion) {
+            grid.animate().cancel();
+            grid.setAlpha(1f);
+            if (glassShown) glass.setAlpha(1f);
+        } else {
+            grid.animate().alpha(1f).setDuration(220).start();
+            if (glassShown) glass.animate().alpha(1f).setDuration(220).start();
+        }
+        if (!grid.hasFocus()) focusTile(lastFocused);
     }
 
     /** Draws today's times with the next one bold and white, and wakes again when that changes. */

@@ -280,6 +280,8 @@ final class Config {
     final int topButtonSize;
     /** A soft dark shadow under the clock, the date and the prayer line (config.json header_shadow). */
     final boolean headerShadow;
+    /** Seconds without a key before Home's app row fades out (config.json rows_autohide_seconds), 0 for never. */
+    final int rowsAutohideSeconds;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -328,8 +330,10 @@ final class Config {
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
-                   double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow) {
+                   double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
+                   int rowsAutohideSeconds) {
         this.font = font;
+        this.rowsAutohideSeconds = rowsAutohideSeconds;
         this.headerShadow = headerShadow;
         this.topButtonSize = topButtonSize;
         this.headerPosition = headerPosition(headerPosition);
@@ -605,6 +609,7 @@ final class Config {
         int prayerIhtiyat = Prayer.IHTIYAT_DEFAULT;
         int topButtonSize = 0;
         boolean headerShadow = false;
+        int rowsAutohideSeconds = 0;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -736,6 +741,7 @@ final class Config {
             prayerIhtiyat = integer(json, "prayer_ihtiyat", prayerIhtiyat, 0, 5);
             topButtonSize = integer(json, "top_button_size", topButtonSize, 28, 42);
             headerShadow = bool(json, "header_shadow", headerShadow);
+            rowsAutohideSeconds = integer(json, "rows_autohide_seconds", rowsAutohideSeconds, 0, 3600);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -802,7 +808,7 @@ final class Config {
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
                 font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
                 headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
-                topButtonSize, headerShadow);
+                topButtonSize, headerShadow, rowsAutohideSeconds);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
