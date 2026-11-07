@@ -1,5 +1,5 @@
 # Windows version of theme.sh: push a theme folder (config.json, and optionally a wallpaper.jpg, a
-# wallpapers/ collection or fonts/) to the launcher on the TV and restart Home. See themes/README.md for the keys.
+# wallpapers/ collection, fonts/ or icons/) to the launcher on the TV and restart Home. See themes/README.md for the keys.
 #
 # Usage: tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
 #        tools\theme.ps1 -TvHost 192.168.1.50 -Reset
@@ -84,10 +84,12 @@ function Drop($name) { "rm -f $dir/$name 2>/dev/null; content delete --uri $uri/
 # Both paths use this one string (the same one theme.sh has).
 # The theme's fonts (config.json "font"), emptied on every push and -Reset, as in theme.sh.
 $clearFonts = "rm -f $dir/fonts/*.[tT][tT][fF] $dir/fonts/*.[oO][tT][fF] 2>/dev/null; content delete --uri $uri/fonts 2>/dev/null"
+# The theme's app logos (icons/<package>.png), emptied on every push and -Reset, as in theme.sh.
+$clearIcons = "rm -f $dir/icons/*.[pP][nN][gG] 2>/dev/null; content delete --uri $uri/icons 2>/dev/null"
 $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][pP][eE][gG] $dir/wallpapers/*.[pP][nN][gG] $dir/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $uri/wallpapers 2>/dev/null"
 
 if ($Reset) {
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $clearFonts; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $clearFonts; $clearIcons; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -143,6 +145,18 @@ if ($fontKey) {
     }
     $fonts = @(Get-Item $fontFile)
 }
+# Every app logo in icons/, named after its package, as in theme.sh: a refused name stops the run before anything is sent.
+$iconsDir = Join-Path $Theme 'icons'
+$icons = @()
+if (Test-Path $iconsDir -PathType Container) {
+    $icons = @(Get-ChildItem $iconsDir -File)
+    foreach ($icon in $icons) {
+        if ($icon.Name -notmatch '^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+\.(png)$') {
+            [Console]::Error.WriteLine("unsupported logo filename: icons/$($icon.Name) (an app logo is a .png named after the app's package, e.g. com.netflix.ninja.png). Nothing was sent to the TV.")
+            exit 2
+        }
+    }
+}
 
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
 Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
@@ -159,6 +173,11 @@ Invoke-Tv tv.py $clearFonts | Out-Null
 foreach ($font in $fonts) {
     Invoke-Tv b64push.py $font.FullName (Stage "fonts/$($font.Name)")
     Invoke-Tv tv.py (Put "fonts/$($font.Name)") | Out-Null
+}
+Invoke-Tv tv.py $clearIcons | Out-Null
+foreach ($icon in $icons) {
+    Invoke-Tv b64push.py $icon.FullName (Stage "icons/$($icon.Name)")
+    Invoke-Tv tv.py (Put "icons/$($icon.Name)") | Out-Null
 }
 # The collection's names (wallpaper_captions); a theme without them leaves no stale names behind.
 $captions = Join-Path $Theme 'wallpapers\captions.txt'

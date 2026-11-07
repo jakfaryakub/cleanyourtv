@@ -75,4 +75,35 @@ public class ThemeFilesTest {
         assertFalse(ThemeFiles.isFonts(Arrays.asList("fonts", "inter.ttf")));
         assertFalse(ThemeFiles.isFonts(Collections.singletonList("wallpapers")));
     }
+
+    @Test public void appLogosAreAllowedByPackageName() {
+        assertEquals("icons/com.netflix.ninja.png", ThemeFiles.path(Arrays.asList("icons", "com.netflix.ninja.png")));
+        assertEquals("icons/com.bstar.intl.tv.PNG", ThemeFiles.path(Arrays.asList("icons", "com.bstar.intl.tv.PNG")));
+        assertEquals("icons/io.github.a_b.App2.png", ThemeFiles.path(Arrays.asList("icons", "io.github.a_b.App2.png")));
+    }
+
+    @Test public void otherLogoPathsAreRefused() {
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "netflix.png")));           // one segment is no package
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "com.netflix.ninja.webp")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "com..ninja.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", ".com.netflix.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "com.1netflix.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "com.net-flix.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "..")));
+        assertNull(ThemeFiles.path(Collections.singletonList("com.netflix.ninja.png")));
+        assertNull(ThemeFiles.path(Arrays.asList("icons", "sub", "com.netflix.ninja.png")));
+    }
+
+    @Test public void onlyTheBareFolderIsTheIcons() {
+        assertTrue(ThemeFiles.isIcons(Collections.singletonList("icons")));
+        assertFalse(ThemeFiles.isIcons(Arrays.asList("icons", "com.netflix.ninja.png")));
+        assertFalse(ThemeFiles.isIcons(Collections.singletonList("fonts")));
+        assertFalse(ThemeFiles.isIcons(null));
+    }
+
+    @Test public void aPackageNamesItsLogo() {
+        assertEquals("com.netflix.ninja.png", ThemeFiles.iconName("com.netflix.ninja"));
+        assertNull(ThemeFiles.iconName("netflix"));
+        assertNull(ThemeFiles.iconName("../x.y"));
+    }
 }

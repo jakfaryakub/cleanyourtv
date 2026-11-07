@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpapers/ collection or fonts/) to the
+# Push a theme (a folder with config.json, and optionally a wallpaper.jpg, a wallpapers/ collection, fonts/ or icons/) to the
 # launcher on the TV and restart Home so it picks it up. The launcher reads the files from its external files
 # directory and overlays config.json on its built-in config.xml; see themes/README.md for the keys.
 #
@@ -113,10 +113,13 @@ del() { echo "rm -f $DIR/$1 2>/dev/null; content delete --uri $URI/$1 2>/dev/nul
 # The theme's fonts (config.json "font"), emptied the same way on every push and --reset, so a theme without a font
 # leaves none behind for the next one to pick up by name.
 CLEAR_FONTS="rm -f $DIR/fonts/*.[tT][tT][fF] $DIR/fonts/*.[oO][tT][fF] 2>/dev/null; content delete --uri $URI/fonts 2>/dev/null"
+# The theme's app logos (icons/<package>.png, config.json "app_logos"), emptied the same way, so a logo from the theme
+# before never stands in for an app the new theme has no logo for.
+CLEAR_ICONS="rm -f $DIR/icons/*.[pP][nN][gG] 2>/dev/null; content delete --uri $URI/icons 2>/dev/null"
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
 
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; $CLEAR_ICONS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
   "$PY" -I theme_restart.py
   echo reset
   exit 0
@@ -193,6 +196,21 @@ if [ -n "$FONT_KEY" ]; then
   fi
   FONTS="$FONT_KEY"
 fi
+# Every app logo in icons/, named after its package (com.netflix.ninja.png), as ThemeFiles.iconFile takes it. A
+# name the launcher would refuse stops the run before anything is sent, like a wallpaper name.
+ICONS=""
+if [ -d "$THEME/icons" ]; then
+  for ICON in "$THEME"/icons/*; do
+    [ -f "$ICON" ] || continue
+    NAME=$(basename "$ICON")
+    if [[ ! "$NAME" =~ ^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+\.([pP][nN][gG])$ ]]; then
+      echo "unsupported logo filename: icons/$NAME (an app logo is a .png named after the app's package, e.g." \
+        "com.netflix.ninja.png). Nothing was sent to the TV." >&2
+      exit 2
+    fi
+    ICONS="$ICONS $NAME"
+  done
+fi
 
 tv "mkdir -p $DIR" >/dev/null 2>&1 || true
 tv --push "$THEME/config.json" "$TMP-config.json" >/dev/null
@@ -212,6 +230,11 @@ tv "$CLEAR_FONTS" >/dev/null
 for NAME in $FONTS; do
   "$PY" -I b64push.py "$THEME/fonts/$NAME" "$(stage "fonts/$NAME")"
   tv "$(put "fonts/$NAME")" >/dev/null
+done
+tv "$CLEAR_ICONS" >/dev/null
+for NAME in $ICONS; do
+  "$PY" -I b64push.py "$THEME/icons/$NAME" "$(stage "icons/$NAME")"
+  tv "$(put "icons/$NAME")" >/dev/null
 done
 # The collection's names (wallpaper_captions); a theme without them leaves no stale names behind.
 if [ -f "$THEME/wallpapers/captions.txt" ]; then
