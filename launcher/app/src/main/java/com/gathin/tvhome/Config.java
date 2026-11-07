@@ -265,6 +265,17 @@ final class Config {
     final float focusScale;
     /** With tile_style logo, how opaque a tile's logo is while it is not focused (config.json unfocused_opacity). */
     final float unfocusedOpacity;
+    /** header_position: "start" (default, clock top left) or "end" (clock and date top right, beside the buttons). */
+    static final String HEADER_START = "start", HEADER_END = "end";
+    final String headerPosition;
+    /** The clock's text size in sp (config.json clock_size, 24-72), or 0 for the layout's 52 sp. */
+    final int clockSize;
+    /** Today's five prayer times under the date (config.json prayer_times), computed offline by Prayer. */
+    final boolean prayerTimes;
+    /** The place for prayer_times (config.json prayer_latitude and prayer_longitude, else config.xml), NaN if unusable. */
+    final double latitude, longitude;
+    /** Minutes Prayer adds to Subuh, Ashar, Maghrib and Isya before rounding up (config.json prayer_ihtiyat, 0-5). */
+    final int prayerIhtiyat;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -312,8 +323,15 @@ final class Config {
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
-                   float focusScale, float unfocusedOpacity) {
+                   float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
+                   double latitude, double longitude, int prayerIhtiyat) {
         this.font = font;
+        this.headerPosition = headerPosition(headerPosition);
+        this.clockSize = clockSize;
+        this.prayerTimes = prayerTimes;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.prayerIhtiyat = prayerIhtiyat;
         this.unfocusedOpacity = unfocusedOpacity;
         this.focusFrame = focusFrame;
         this.focusScale = focusScale;
@@ -573,6 +591,12 @@ final class Config {
         boolean focusFrame = true;
         float focusScale = 0f;
         float unfocusedOpacity = 1f;
+        String headerPosition = HEADER_START;
+        int clockSize = 0;
+        boolean prayerTimes = false;
+        double latitude = coordinate(res.getString(R.string.latitude), 90);
+        double longitude = coordinate(res.getString(R.string.longitude), 180);
+        int prayerIhtiyat = Prayer.IHTIYAT_DEFAULT;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -696,6 +720,12 @@ final class Config {
             focusFrame = bool(json, "focus_frame", focusFrame);
             focusScale = focusScale(json.opt("focus_scale"), focusScale);
             unfocusedOpacity = unfocusedOpacity(json.opt("unfocused_opacity"), unfocusedOpacity);
+            headerPosition = string(json, "header_position", headerPosition);
+            clockSize = clockSize(json.opt("clock_size"), clockSize);
+            prayerTimes = bool(json, "prayer_times", prayerTimes);
+            latitude = coordinate(json.opt("prayer_latitude"), 90, latitude);
+            longitude = coordinate(json.opt("prayer_longitude"), 180, longitude);
+            prayerIhtiyat = integer(json, "prayer_ihtiyat", prayerIhtiyat, 0, 5);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -760,7 +790,8 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity);
+                font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
+                headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
@@ -779,6 +810,35 @@ final class Config {
         if (!(v instanceof Number)) return fallback;
         float f = ((Number) v).floatValue();
         return f >= 1f && f <= 1.3f ? f : fallback;
+    }
+
+    /** A known header_position, or start (the default) for anything else. */
+    static String headerPosition(String value) {
+        return value != null && HEADER_END.equalsIgnoreCase(value.trim()) ? HEADER_END : HEADER_START;
+    }
+
+    /** clock_size: a whole number of sp from 24 to 72, or the fallback for anything else. */
+    static int clockSize(Object v, int fallback) {
+        if (!(v instanceof Number)) return fallback;
+        double d = ((Number) v).doubleValue();
+        return d >= 24 && d <= 72 && d == Math.rint(d) ? (int) d : fallback;
+    }
+
+    /** A latitude or longitude from config.json: a number within +-limit degrees, or the fallback. */
+    static double coordinate(Object v, double limit, double fallback) {
+        if (!(v instanceof Number)) return fallback;
+        double d = ((Number) v).doubleValue();
+        return !Double.isNaN(d) && Math.abs(d) <= limit ? d : fallback;
+    }
+
+    /** The same from config.xml's latitude and longitude strings; NaN when empty or unusable. */
+    static double coordinate(String v, double limit) {
+        if (v == null || v.trim().isEmpty()) return Double.NaN;
+        try {
+            return coordinate(Double.parseDouble(v.trim()), limit, Double.NaN);
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
     }
 
     /** unfocused_opacity: a number from 0.3 to 1.0 (no dimming), or the fallback for anything else. */
