@@ -170,22 +170,28 @@ if [ -d "$THEME/wallpapers" ]; then
     esac
   done
 fi
-# Font names, checked the same way and for the same reason; only .ttf and .otf are fonts the launcher loads.
+# The one font the theme names (config.json "font"), so a fonts/ folder holding alternatives sends only the one
+# in use. No key, an empty one or one that is not a string sends none, and the folder on the TV is emptied below
+# either way. A name the launcher would refuse, or one with no file behind it, stops the run before anything is
+# sent: the TV would otherwise keep Outfit while this run said the theme was on it.
 FONTS=""
-if [ -d "$THEME/fonts" ]; then
-  for FONT in "$THEME"/fonts/*; do
-    [ -f "$FONT" ] || continue
-    case "$FONT" in
-      *.[tT][tT][fF]|*.[oO][tT][fF])
-        NAME=$(basename "$FONT")
-        if [[ ! "$NAME" =~ ^[A-Za-z0-9_.-]+$ || "$NAME" == *..* || "$NAME" == .* ]]; then
-          echo "unsupported font filename: $NAME (letters, digits, '.', '_' and '-', with no '..' in the name)." \
-            "Nothing was sent to the TV." >&2
-          exit 2
-        fi
-        FONTS="$FONTS $NAME" ;;
-    esac
-  done
+FONT_KEY=$("$PY" -I -c '
+import json, sys
+with open(sys.argv[1], encoding="utf-8-sig") as handle:
+    value = json.load(handle).get("font", "")
+print(value.strip() if isinstance(value, str) else "")
+' "$THEME/config.json")
+if [ -n "$FONT_KEY" ]; then
+  if [[ ! "$FONT_KEY" =~ ^[A-Za-z0-9_.-]+\.([tT][tT][fF]|[oO][tT][fF])$ || "$FONT_KEY" == *..* || "$FONT_KEY" == .* ]]; then
+    echo "unsupported font filename: $FONT_KEY (config.json \"font\": a .ttf or .otf named with letters, digits, '.'," \
+      "'_' and '-', with no '..' in the name). Nothing was sent to the TV." >&2
+    exit 2
+  fi
+  if [ ! -f "$THEME/fonts/$FONT_KEY" ]; then
+    echo "config.json names the font $FONT_KEY, but $THEME/fonts/$FONT_KEY is not there. Nothing was sent to the TV." >&2
+    exit 2
+  fi
+  FONTS="$FONT_KEY"
 fi
 
 tv "mkdir -p $DIR" >/dev/null 2>&1 || true

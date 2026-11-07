@@ -126,17 +126,22 @@ if (Test-Path $wallpapers -PathType Container) {
         }
     }
 }
-# Font names, checked the same way; only .ttf and .otf are fonts the launcher loads.
-$fontDir = Join-Path $Theme 'fonts'
+# The one font the theme names (config.json "font"), as in theme.sh: only that file is sent, none without the key,
+# and a refused name or a missing file stops the run before anything is sent.
 $fonts = @()
-if (Test-Path $fontDir -PathType Container) {
-    $fonts = @(Get-ChildItem $fontDir -File | Where-Object { $_.Extension -match '^\.(ttf|otf)$' })
-    foreach ($font in $fonts) {
-        if ($font.Name -notmatch '^[A-Za-z0-9_.-]+$' -or $font.Name.Contains('..') -or $font.Name.StartsWith('.')) {
-            [Console]::Error.WriteLine("unsupported font filename: $($font.Name) (letters, digits, '.', '_' and '-', with no '..' in the name). Nothing was sent to the TV.")
-            exit 2
-        }
+$fontKey = ''
+if ($themeJson.PSObject.Properties.Name -contains 'font' -and $themeJson.font -is [string]) { $fontKey = $themeJson.font.Trim() }
+if ($fontKey) {
+    if ($fontKey -notmatch '^[A-Za-z0-9_.-]+\.(ttf|otf)$' -or $fontKey.Contains('..') -or $fontKey.StartsWith('.')) {
+        [Console]::Error.WriteLine("unsupported font filename: $fontKey (config.json ""font"": a .ttf or .otf named with letters, digits, '.', '_' and '-', with no '..' in the name). Nothing was sent to the TV.")
+        exit 2
     }
+    $fontFile = Join-Path (Join-Path $Theme 'fonts') $fontKey
+    if (-not (Test-Path $fontFile -PathType Leaf)) {
+        [Console]::Error.WriteLine("config.json names the font $fontKey, but $fontFile is not there. Nothing was sent to the TV.")
+        exit 2
+    }
+    $fonts = @(Get-Item $fontFile)
 }
 
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
