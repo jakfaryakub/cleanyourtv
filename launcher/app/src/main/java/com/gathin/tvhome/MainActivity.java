@@ -3270,7 +3270,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } else {
             if (icon != wifiIcon) {
                 wifiIcon = icon;
-                btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+                setNetworkIcon(icon);
             }
             ColorStateList tint = online ? wifiOnlineTint : wifiPlainTint;
             // wifi_status_warnings: orange while connected but not validated (a captive portal), red while offline.
@@ -3309,6 +3309,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         LinearLayout buttons = findViewById(R.id.topButtons);
         float ratio = dp / 42f;
         int size = Math.round(dp * density);
+        iconButtonIconPx = Math.round(22 * density * ratio);
         for (int i = 0; i < buttons.getChildCount(); i++) {
             if (!(buttons.getChildAt(i) instanceof TextView)) continue;
             TextView b = (TextView) buttons.getChildAt(i);
@@ -3326,6 +3327,24 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
                 b.setCompoundDrawablesRelative(d[0], d[1], d[2], d[3]);
             }
         }
+    }
+
+    /** top_button_size: the icon size the round buttons were drawn at, or 0 for the drawables' own 22dp. */
+    private int iconButtonIconPx;
+
+    /**
+     * The network button's icon (Wi-Fi or Ethernet). With top_button_size the round button keeps its smaller icon:
+     * the intrinsic 22dp, set again on every network change, overflowed the button's padding and drew the glyph
+     * 4 px right of centre at 34dp.
+     */
+    private void setNetworkIcon(int res) {
+        if (iconButtonIconPx <= 0 || !wifiIconOnly) {
+            btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(res, 0, 0, 0);
+            return;
+        }
+        Drawable d = getDrawable(res);
+        if (d != null) d.setBounds(0, 0, iconButtonIconPx, iconButtonIconPx);
+        btnWifi.setCompoundDrawablesRelative(d, null, null, null);
     }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
