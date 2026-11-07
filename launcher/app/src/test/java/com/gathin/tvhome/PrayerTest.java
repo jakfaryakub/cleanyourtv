@@ -72,6 +72,23 @@ public class PrayerTest {
         safe("kemenag-jakarta-2026-validation.csv", 272);
     }
 
+    @Test public void theHoldoutMonthsAreNeverEarlyAndAtMostAMinuteLate() throws Exception {
+        // May, July and October: loaded after the parameters and the margin were fixed, checked once, never tuned on.
+        List<String[]> rows = table("kemenag-jakarta-2026-holdout.csv");
+        int[][] count = new int[Prayer.COUNT][3];   // earlier, same, one minute later
+        for (String[] row : rows) {
+            int[] got = Prayer.times(LocalDate.parse(row[0]), LAT, LON, WIB, Prayer.IHTIYAT_DEFAULT);
+            for (int i = 0; i < Prayer.COUNT; i++) {
+                int late = got[i] - minutes(row[i + 1]);
+                count[i][late < 0 ? 0 : late == 0 ? 1 : 2]++;
+            }
+        }
+        for (int i = 0; i < Prayer.COUNT; i++) {
+            System.out.printf("holdout %-8s earlier %3d  same %3d  later %3d%n", NAMES[i], count[i][0], count[i][1], count[i][2]);
+        }
+        safe("kemenag-jakarta-2026-holdout.csv", 93);
+    }
+
     @Test public void theTuningDatesKeepTheSameRule() throws Exception {
         safe("kemenag-jakarta-2026-tuning.csv", 6);
     }
