@@ -7,7 +7,8 @@ import java.time.ZoneId;
  * Today's five prayer times for a place (config.json prayer_times), computed offline with Kemenag RI's parameters:
  * Subuh with the sun 20 degrees below the horizon, Isya at 18, Ashar when a shadow is its object's length plus the
  * noon shadow (Shafi'i), Maghrib at -1.0 degrees (refraction, the sun's half width and the horizon's dip), Dzuhur at
- * the sun's transit plus 3 minutes and the others plus the ihtiyat, each rounded up to the minute.
+ * the sun's transit plus 3 minutes and the others plus the ihtiyat. Then a safety margin of {@link #SAFETY_SECONDS}
+ * and a round up to the minute: a time shown must never be earlier than Kemenag's, and may be a minute later.
  *
  * The sun's place comes from Meeus' low-precision formulas (Astronomical Algorithms, ch. 25 and 28), evaluated at
  * the time of each event and iterated, which keeps Dzuhur and Maghrib within the minute where {@link Sun}'s
@@ -23,6 +24,12 @@ final class Prayer {
     static final int IHTIYAT_DEFAULT = 2;
     static final int DZUHUR_EXTRA = 3;
     static final double SUBUH_ANGLE = -20, ISYA_ANGLE = -18, MAGHRIB_ALTITUDE = -1.0;
+    /**
+     * Added before rounding up, so no time comes out earlier than Kemenag's. Against every day of the nine months of
+     * Kemenag's 2026 Jakarta table in PrayerTest, the unrounded times sat between 1.39 minutes early and 0.18 late:
+     * any margin from 24 to 49 seconds keeps every day at 0 or +1 minute; 30 leaves room on both sides.
+     */
+    static final int SAFETY_SECONDS = 30;
 
     private Prayer() {
     }
@@ -64,7 +71,7 @@ final class Prayer {
 
     private static int minute(double hours, int extra) {
         if (Double.isNaN(hours)) return NONE;
-        return (int) Math.ceil(hours * 60 + extra - 1e-9);
+        return (int) Math.ceil(hours * 60 + extra + SAFETY_SECONDS / 60.0 - 1e-9);
     }
 
     /** Local time in hours of one event, or NaN when the sun never reaches its altitude that day. */

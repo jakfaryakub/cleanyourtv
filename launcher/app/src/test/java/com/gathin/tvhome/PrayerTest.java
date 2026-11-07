@@ -43,26 +43,37 @@ public class PrayerTest {
         return Integer.parseInt(hhmm.substring(0, 2)) * 60 + Integer.parseInt(hhmm.substring(3, 5));
     }
 
-    private static void within(String file, int tolerance) throws Exception {
+    /**
+     * The safety rule: a computed time is never earlier than Kemenag's and at most one minute later. Prayer must not
+     * tell anyone a prayer has begun before the official time.
+     */
+    private static void safe(String file, int days) throws Exception {
         List<String[]> rows = table(file);
-        assertEquals(file, 6, rows.size());
+        assertEquals(file, days, rows.size());
+        StringBuilder bad = new StringBuilder();
         for (String[] row : rows) {
             int[] got = Prayer.times(LocalDate.parse(row[0]), LAT, LON, WIB, Prayer.IHTIYAT_DEFAULT);
             for (int i = 0; i < Prayer.COUNT; i++) {
-                int want = minutes(row[i + 1]);
-                assertTrue(row[0] + " " + NAMES[i] + ": Kemenag " + row[i + 1] + ", computed "
-                                + String.format("%02d:%02d", got[i] / 60, got[i] % 60),
-                        Math.abs(got[i] - want) <= tolerance);
+                int late = got[i] - minutes(row[i + 1]);
+                if (late < 0 || late > 1) {
+                    bad.append(String.format("%n%s %s: Kemenag %s, computed %02d:%02d (%+d)", row[0], NAMES[i],
+                            row[i + 1], got[i] / 60, got[i] % 60, late));
+                }
             }
         }
+        assertTrue("never earlier, at most 1 minute later:" + bad, bad.length() == 0);
     }
 
-    @Test public void theHeldOutDatesMatchKemenagWithinAMinute() throws Exception {
-        within("kemenag-jakarta-2026-test.csv", 1);
+    @Test public void theHeldOutDatesAreNeverEarlyAndAtMostAMinuteLate() throws Exception {
+        safe("kemenag-jakarta-2026-test.csv", 6);
     }
 
-    @Test public void theTuningDatesStillMatchKemenagWithinAMinute() throws Exception {
-        within("kemenag-jakarta-2026-tuning.csv", 1);
+    @Test public void everyDayOfNineMonthsIsNeverEarlyAndAtMostAMinuteLate() throws Exception {
+        safe("kemenag-jakarta-2026-validation.csv", 272);
+    }
+
+    @Test public void theTuningDatesKeepTheSameRule() throws Exception {
+        safe("kemenag-jakarta-2026-tuning.csv", 6);
     }
 
     @Test public void theNextPrayerIsTheFirstStillToCome() {
