@@ -204,7 +204,8 @@ final class WallpaperPlayer {
         if (animatedFile == null || animation != null || animationLoading || closed) return;
         int decision = AnimatedWallpaper.decide(Build.VERSION.SDK_INT, reducedMotion, animatedFile.length());
         if (decision != AnimatedWallpaper.PLAY) {
-            Log.i(TAG, "wallpaper.webp not played (" + AnimatedWallpaper.reason(decision) + "): the still wallpaper stays");
+            Log.i(TAG, "wallpaper.webp not played (" + AnimatedWallpaper.reason(decision)
+                    + "): the still wallpaper stays");
             animatedFile = null;
             return;
         }
@@ -393,6 +394,13 @@ final class WallpaperPlayer {
         /** wallpaper.webp as a looping AnimatedImageDrawable at no more than 960x540, or null (logged). */
         static Drawable decode(File file) {
             try {
+                byte[] header = new byte[12];
+                try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
+                    if (in.read(header) != header.length || !AnimatedWallpaper.complete(header, file.length())) {
+                        Log.w(TAG, "wallpaper.webp is cut short or not a WebP: the still wallpaper stays");
+                        return null;
+                    }
+                }
                 Drawable drawable = ImageDecoder.decodeDrawable(ImageDecoder.createSource(file),
                         (decoder, info, source) -> {
                             int width = info.getSize().getWidth(), height = info.getSize().getHeight();

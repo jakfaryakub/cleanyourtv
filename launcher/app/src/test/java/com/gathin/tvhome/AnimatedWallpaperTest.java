@@ -49,4 +49,33 @@ public class AnimatedWallpaperTest {
         assertArrayEquals(new int[] {960, 411}, AnimatedWallpaper.decodeSize(1680, 720));   // 21:9
         assertArrayEquals(new int[] {720, 540}, AnimatedWallpaper.decodeSize(1440, 1080));  // 4:3
     }
+
+    private static byte[] header(String riff, long size, String webp) {
+        byte[] h = new byte[12];
+        for (int i = 0; i < 4; i++) {
+            h[i] = (byte) riff.charAt(i);
+            h[4 + i] = (byte) (size >> (8 * i));
+            h[8 + i] = (byte) webp.charAt(i);
+        }
+        return h;
+    }
+
+    @Test public void aWholeWebpIsComplete() {
+        assertTrue(AnimatedWallpaper.complete(header("RIFF", 152_168, "WEBP"), 152_176));
+    }
+
+    @Test public void aWebpCutShortIsRefused() {
+        assertFalse(AnimatedWallpaper.complete(header("RIFF", 152_168, "WEBP"), 20_000));
+    }
+
+    @Test public void otherFilesAreRefused() {
+        assertFalse(AnimatedWallpaper.complete(header("RIFF", 92, "WAVE"), 100));
+        assertFalse(AnimatedWallpaper.complete(header("GIF8", 92, "WEBP"), 100));
+        assertFalse(AnimatedWallpaper.complete(new byte[4], 100));
+        assertFalse(AnimatedWallpaper.complete(null, 100));
+    }
+
+    @Test public void aSizeOver2GbIsReadUnsigned() {
+        assertTrue(AnimatedWallpaper.complete(header("RIFF", 0xFFFF_FFF0L, "WEBP"), 0xFFFF_FFF8L));
+    }
 }
