@@ -76,3 +76,9 @@ rule sit on its wanted list until a screenshot arrives.
 | `focus_frame` | <img src="switches/tile_style.jpg" width="320" alt="focus_frame false on a TV: the focused YouTube logo marked by its zoom alone, with no highlight around it"> |
 | `focus_scale` | <img src="switches/tile_style.jpg" width="320" alt="focus_scale 1.2 on a TV: the focused YouTube logo a fifth larger than the others"> |
 | `unfocused_opacity` | <img src="switches/unfocused_opacity.jpg" width="320" alt="unfocused_opacity 0.5 with animations false on a TV: Netflix focused at full opacity, the other logos at half"> |
+| `header_position` | <img src="switches/header_position.jpg" width="320" alt="header_position end on a TV: the date and a smaller clock top right, beside the Wi-Fi and Settings buttons"> |
+| `clock_size` | <img src="switches/header_position.jpg" width="320" alt="clock_size 40 on a TV: the clock top right smaller than the default 52"> |
+| `prayer_times` | <img src="switches/header_position.jpg" width="320" alt="prayer_times on a TV: Subuh 04:07, Dzuhur 11:40, Ashar 14:58, Maghrib 17:50 and Isya 19:02 under the clock, the next prayer, Subuh, in bold"> |
+| `prayer_latitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_latitude -6.1701 on a TV: the prayer times for Jakarta under the clock"> |
+| `prayer_longitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_longitude 106.8311 on a TV: the prayer times for Jakarta under the clock"> |
+| `prayer_ihtiyat` | <img src="switches/header_position.jpg" width="320" alt="prayer_ihtiyat 2 on a TV: the prayer times under the clock with Kemenag's two minutes added"> |
