@@ -76,9 +76,10 @@ rule sit on its wanted list until a screenshot arrives.
 | `focus_frame` | <img src="switches/tile_style.jpg" width="320" alt="focus_frame false on a TV: the focused YouTube logo marked by its zoom alone, with no highlight around it"> |
 | `focus_scale` | <img src="switches/tile_style.jpg" width="320" alt="focus_scale 1.2 on a TV: the focused YouTube logo a fifth larger than the others"> |
 | `unfocused_opacity` | <img src="switches/unfocused_opacity.jpg" width="320" alt="unfocused_opacity 0.5 with animations false on a TV: Netflix focused at full opacity, the other logos at half"> |
-| `header_position` | <img src="switches/header_position.jpg" width="320" alt="header_position end on a TV: the date and a smaller clock top right, beside the Wi-Fi and Settings buttons"> |
-| `clock_size` | <img src="switches/header_position.jpg" width="320" alt="clock_size 40 on a TV: the clock top right smaller than the default 52"> |
-| `prayer_times` | <img src="switches/header_position.jpg" width="320" alt="prayer_times on a TV after Isha: Tomorrow, then Fajr 04:07 in bold, Dhuhr 11:40, Asr 14:59, Maghrib 17:51 and Isha 19:03 under the clock"> |
+| `header_position` | <img src="switches/header_position.jpg" width="320" alt="header_position end with date_below_clock on a TV: a large clock top right with the date under it, beside two small buttons"> |
+| `clock_size` | <img src="switches/header_position.jpg" width="320" alt="clock_size 64 on a TV: the clock top right larger than the default 52, the date under it at its usual size"> |
+| `prayer_times` | <img src="switches/header_position.jpg" width="320" alt="prayer_times on a TV after Isha: Tomorrow, then Fajr 04:07 in bold, Dhuhr 11:40, Asr 14:59, Maghrib 17:51 and Isha 19:03 under the date"> |
 | `prayer_latitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_latitude -6.1701 on a TV: the prayer times for Jakarta under the clock"> |
 | `prayer_longitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_longitude 106.8311 on a TV: the prayer times for Jakarta under the clock"> |
 | `prayer_ihtiyat` | <img src="switches/header_position.jpg" width="320" alt="prayer_ihtiyat 2 on a TV: the prayer times under the clock with Kemenag's two minutes added"> |
+| `top_button_size` | <img src="switches/header_position.jpg" width="320" alt="top_button_size 34 on a TV: the Wi-Fi and Settings buttons smaller beside the clock"> |
