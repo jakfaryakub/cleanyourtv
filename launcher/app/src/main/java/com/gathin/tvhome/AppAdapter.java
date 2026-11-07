@@ -223,6 +223,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean uniformTiles;
     /** app_logos: each app's logo from the theme's icons/ folder, where the theme has one. */
     private final boolean appLogos;
+    /** tile_style "logo": app tiles have no card; each shows its logo, or its name as a white wordmark. */
+    private final boolean logoTiles;
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
@@ -246,6 +248,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
         this.appLogos = cfg.appLogos;
+        this.logoTiles = Config.TILE_LOGO.equals(cfg.tileStyle);
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -441,7 +444,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         name.setLayoutParams(nameLp);
         // A sideways row would stretch a match_parent item across the whole screen: give it a grid column's width.
         if (singleRow) v.getLayoutParams().width = inner / dockSize;
-        if (uniformTiles) {
+        if (logoTiles) {
+            // tile_style logo: the label becomes the wordmark of an app with no logo, centred in the logo's box.
+            TextView label = v.findViewById(R.id.label);
+            FrameLayout.LayoutParams labelLp = (FrameLayout.LayoutParams) label.getLayoutParams();
+            labelLp.gravity = android.view.Gravity.CENTER;
+            label.setLayoutParams(labelLp);
+            int padX = Math.round(w * (1f - LOGO_WIDTH_SHARE) / 2f);
+            label.setPadding(padX, 0, padX, 0);
+            label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, wordmarkTextPx(h));
+            label.setTypeface(UiFont.get(ctx, R.string.font_medium));
+        } else if (uniformTiles) {
             // tvOS-style tile: a large centred mark, no caption inside the card.
             View icon = v.findViewById(R.id.icon);
             FrameLayout.LayoutParams iconLp = (FrameLayout.LayoutParams) icon.getLayoutParams();
@@ -495,9 +508,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
+        Bitmap logo = e.logo != null ? logoFor(e.logo, h) : null;
+        // tile_style logo: an app tile has no card. A module card stays a card: its banner is the card.
+        boolean bare = logoTiles && e.kind != Entry.CARD;
+        setBare(h, bare);
+        if (bare) {
+            bindBare(h, e, logo);
+            bindActions(h, e);
+            return;
+        }
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
-        Bitmap logo = e.logo != null ? logoFor(e.logo, h) : null;
         h.card.setBackground(logo == null && e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
         // A logo sits on the dark card (tile_bg); uniform_tiles' tinted fill is for the icon it replaces.
         if (logo == null && uniformTiles && e.banner == null) {
@@ -521,6 +542,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.label.setText(e.label);
             h.label.setVisibility(uniformTiles ? View.GONE : View.VISIBLE);
         }
+        bindActions(h, e);
+    }
+
+    /** OK opens the tile; holding OK opens the tile menu, or the app's info without one. */
+    private void bindActions(Holder h, Entry e) {
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             if (tileMenu) {
@@ -718,6 +744,40 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.banner.setVisibility(View.VISIBLE);
         h.icon.setVisibility(View.GONE);
         h.label.setVisibility(View.GONE);
+    }
+
+    /** Share of the tile's height a wordmark's text takes (tile_style logo, an app with no logo). */
+    static final float WORDMARK_SHARE = 0.22f;
+
+    static float wordmarkTextPx(int tileH) {
+        return tileH * WORDMARK_SHARE;
+    }
+
+    /**
+     * tile_style logo: no card fill and no rounded outline, which would draw a shadow and clip the zoomed logo. A
+     * recycled view that held a module card gets them back.
+     */
+    private static void setBare(Holder h, boolean bare) {
+        if (bare == h.bare) return;
+        h.bare = bare;
+        h.card.setOutlineProvider(bare ? null : h.tileOutline);
+        h.card.setClipToOutline(!bare);
+        if (bare) h.card.setBackground(null);
+    }
+
+    /** The logo if the theme has one for this app, else the app's name as a white wordmark in the theme font. */
+    private void bindBare(Holder h, Entry e, Bitmap logo) {
+        h.icon.setImageDrawable(null);
+        h.icon.setVisibility(View.GONE);
+        if (logo != null) {
+            showLogo(h, logo);
+            return;
+        }
+        clearLogo(h);
+        h.banner.setImageDrawable(null);
+        h.banner.setVisibility(View.GONE);
+        h.label.setText(e.label);
+        h.label.setVisibility(View.VISIBLE);
     }
 
     /** Puts the banner view back as item_app.xml has it, for a recycled tile that showed a logo. */
@@ -967,6 +1027,10 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final boolean overshoot;
         /** A dock tile: it grows in place without advanced_effects' lift, which reads as off-centre in the band (#2135). */
         boolean inDock;
+        /** The card's rounded outline, kept for a recycled tile that goes back from bare (tile_style logo) to a card. */
+        final ViewOutlineProvider tileOutline;
+        /** tile_style logo: this tile is drawn with no card. */
+        boolean bare;
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
                boolean reducedMotion, float restNameAlpha, boolean overshoot) {
@@ -984,13 +1048,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             this.overshoot = overshoot;
 
             final float density = v.getResources().getDisplayMetrics().density;
-            card.setOutlineProvider(new ViewOutlineProvider() {
+            tileOutline = new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {
                     // 16dp at the design width, scaled down with the tile so small tiles keep the same shape.
                     outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius(view.getWidth(), density));
                 }
-            });
+            };
+            card.setOutlineProvider(tileOutline);
             card.setClipToOutline(true);
 
             card.setOnKeyListener((view, keyCode, event) -> {

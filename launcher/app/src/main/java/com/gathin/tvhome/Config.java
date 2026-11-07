@@ -255,6 +255,10 @@ final class Config {
 
     static final String GLOW_RADIAL = "radial", GLOW_HORIZON = "horizon";
     static final String GLASS_DEFAULT = "glass", GLASS_RIM = "rim", GLASS_HALO = "halo";
+    /** tile_style: "card" (the default, every tile on its card) or "logo" (the app's logo or name, no card). */
+    static final String TILE_CARD = "card", TILE_LOGO = "logo";
+    /** Home's app tiles as cards or as bare logos (config.json tile_style). */
+    final String tileStyle;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -301,8 +305,9 @@ final class Config {
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
-                   String font, float fontScale, boolean appLogos) {
+                   String font, float fontScale, boolean appLogos, String tileStyle) {
         this.font = font;
+        this.tileStyle = tileStyle(tileStyle);
         this.appLogos = appLogos;
         this.fontScale = fontScale;
         this.handleViewInputs = handleViewInputs;
@@ -554,6 +559,7 @@ final class Config {
         String font = "";
         float fontScale = 1f;
         boolean appLogos = false;
+        String tileStyle = TILE_CARD;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -673,6 +679,7 @@ final class Config {
             font = fontName(string(json, "font", font));
             fontScale = fontScale(json.opt("font_scale"), fontScale);
             appLogos = bool(json, "app_logos", appLogos);
+            tileStyle = string(json, "tile_style", tileStyle);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -737,7 +744,7 @@ final class Config {
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
-                font, fontScale, appLogos);
+                font, fontScale, appLogos, tileStyle);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
@@ -746,6 +753,11 @@ final class Config {
     }
 
     /** font_scale between 0.85 and 1.25; anything else, or a value that is not a number, keeps the fallback. */
+    /** A known tile_style, or card (the default) for anything else. */
+    static String tileStyle(String value) {
+        return value != null && TILE_LOGO.equalsIgnoreCase(value.trim()) ? TILE_LOGO : TILE_CARD;
+    }
+
     static float fontScale(Object v, float fallback) {
         if (!(v instanceof Number)) return fallback;
         float f = ((Number) v).floatValue();
