@@ -33,4 +33,14 @@ public class HeaderKeysTest {
         assertTrue(Double.isNaN(Config.coordinate("north", 90)));
         assertTrue(Double.isNaN(Config.coordinate("200", 180)));
     }
+
+    @Test public void aTopButtonSizeIsAWholeNumberOfDpInRange() {
+        assertEquals(28, Config.topButtonSize(28, 0));
+        assertEquals(34, Config.topButtonSize(34.0, 0));
+        assertEquals(42, Config.topButtonSize(42, 0));
+        assertEquals(0, Config.topButtonSize(27, 0));
+        assertEquals(0, Config.topButtonSize(43, 0));
+        assertEquals(0, Config.topButtonSize(33.5, 0));
+        assertEquals(0, Config.topButtonSize("34", 0));
+    }
 }

@@ -907,6 +907,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             makeIconOnly((TextView) btnSettings);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
+        if (cfg.topButtonSize > 0) resizeIconButtons(cfg.topButtonSize);
         iconOnlyVpn = vpnPill && cfg.iconOnlyVpn;
         if (iconOnlyVpn) {
             vpnPlainBackground = btnVpn.getBackground().getConstantState();
@@ -2558,12 +2559,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
-    /** clock_size: the clock at this many sp, and the date, the AM/PM mark and the divider at the same ratio. */
+    /**
+     * clock_size: the clock at this many sp, the AM/PM mark and the divider at the same ratio, and the date smaller
+     * with a smaller clock but never larger: a big clock over a small date is the look a larger size is for.
+     */
     private void applyClockSize(int sp) {
         float ratio = sp / 52f;
         ((TextView) findViewById(R.id.clock)).setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
         TextView date = findViewById(R.id.date);
-        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(10f, date.getTextSize() / getResources().getDisplayMetrics().scaledDensity * ratio));
+        float dateRatio = Math.min(1f, ratio);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(10f, date.getTextSize() / getResources().getDisplayMetrics().scaledDensity * dateRatio));
         TextView ampm = findViewById(R.id.ampm);
         ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(9f, 15f * ratio));
         View divider = findViewById(R.id.clockDivider);
@@ -2581,7 +2586,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         LinearLayout dateColumn = (LinearLayout) date.getParent();
         View divider = findViewById(R.id.clockDivider);
         LinearLayout clockRow = (LinearLayout) findViewById(R.id.clock).getParent();
-        if (dateColumn.getParent() == clockRow) {
+        if (dateColumn.getParent() != clockRow) {
+            // date_below_clock moved the date under the clock: keep it there, flush right under the clock.
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dateColumn.getLayoutParams();
+            lp.gravity = Gravity.RIGHT;
+            dateColumn.setLayoutParams(lp);
+        } else {
             // Date | clock: the date column first, its own width, then the divider, the clock and AM/PM.
             clockRow.removeView(dateColumn);
             clockRow.removeView(divider);
@@ -2619,7 +2629,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         line.setFocusable(false);
         line.setIncludeFontPadding(false);
         line.setTextColor(0xB3FFFFFF);
-        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+        // At least the date's size, so the line reads from the sofa as well as the date does.
+        TextView date = findViewById(R.id.date);
+        float dateSp = date.getTextSize() / getResources().getDisplayMetrics().scaledDensity;
+        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(15f, dateSp));
         line.setLetterSpacing(0.02f);
         line.setTypeface(UiFont.get(this, R.string.font_regular));
         View stats = findViewById(R.id.stats);
@@ -2662,7 +2675,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         for (int i = 0; i < Prayer.COUNT; i++) {
             if (times[i] == Prayer.NONE) continue;
-            if (text.length() > 0) text.append("\u2003");
+            if (text.length() > 0) text.append("\u2003\u2003");
             int start = text.length();
             text.append(names[i]).append(' ').append(String.format(Locale.ROOT, "%02d:%02d", times[i] / 60, times[i] % 60));
             if (i == next) {
@@ -3209,6 +3222,33 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean libraryFromTopBar;
     /** The open library came from the VPN pill (vpn_pill, no VPN app): closing it returns there while the pill still shows. */
     private boolean libraryFromVpnPill;
+
+    /**
+     * top_button_size: every round icon-only top button (42dp, a 22dp icon) at this many dp, its icon scaled with it.
+     * Pills that keep a label are left alone.
+     */
+    private void resizeIconButtons(int dp) {
+        LinearLayout buttons = findViewById(R.id.topButtons);
+        float ratio = dp / 42f;
+        int size = Math.round(dp * density);
+        for (int i = 0; i < buttons.getChildCount(); i++) {
+            if (!(buttons.getChildAt(i) instanceof TextView)) continue;
+            TextView b = (TextView) buttons.getChildAt(i);
+            if (b.getText() != null && b.getText().length() > 0) continue;   // a labelled pill
+            ViewGroup.LayoutParams lp = b.getLayoutParams();
+            lp.width = size;
+            lp.height = size;
+            b.setLayoutParams(lp);
+            int pad = Math.round(10 * density * ratio);
+            b.setPaddingRelative(pad, 0, pad, 0);
+            android.graphics.drawable.Drawable[] d = b.getCompoundDrawablesRelative();
+            int icon = Math.round(22 * density * ratio);
+            if (d[0] != null) {
+                d[0].setBounds(0, 0, icon, icon);
+                b.setCompoundDrawablesRelative(d[0], d[1], d[2], d[3]);
+            }
+        }
+    }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {

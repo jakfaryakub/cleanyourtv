@@ -276,6 +276,8 @@ final class Config {
     final double latitude, longitude;
     /** Minutes Prayer adds to Subuh, Ashar, Maghrib and Isya before rounding up (config.json prayer_ihtiyat, 0-5). */
     final int prayerIhtiyat;
+    /** The round icon-only top buttons' size in dp (config.json top_button_size, 28-42), or 0 for 42. */
+    final int topButtonSize;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -324,8 +326,9 @@ final class Config {
                    int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
-                   double latitude, double longitude, int prayerIhtiyat) {
+                   double latitude, double longitude, int prayerIhtiyat, int topButtonSize) {
         this.font = font;
+        this.topButtonSize = topButtonSize;
         this.headerPosition = headerPosition(headerPosition);
         this.clockSize = clockSize;
         this.prayerTimes = prayerTimes;
@@ -597,6 +600,7 @@ final class Config {
         double latitude = coordinate(res.getString(R.string.latitude), 90);
         double longitude = coordinate(res.getString(R.string.longitude), 180);
         int prayerIhtiyat = Prayer.IHTIYAT_DEFAULT;
+        int topButtonSize = 0;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -726,6 +730,7 @@ final class Config {
             latitude = coordinate(json.opt("prayer_latitude"), 90, latitude);
             longitude = coordinate(json.opt("prayer_longitude"), 180, longitude);
             prayerIhtiyat = integer(json, "prayer_ihtiyat", prayerIhtiyat, 0, 5);
+            topButtonSize = topButtonSize(json.opt("top_button_size"), topButtonSize);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -791,7 +796,8 @@ final class Config {
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
                 font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
-                headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat);
+                headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
+                topButtonSize);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
@@ -815,6 +821,13 @@ final class Config {
     /** A known header_position, or start (the default) for anything else. */
     static String headerPosition(String value) {
         return value != null && HEADER_END.equalsIgnoreCase(value.trim()) ? HEADER_END : HEADER_START;
+    }
+
+    /** top_button_size: a whole number of dp from 28 to 42, or the fallback for anything else. */
+    static int topButtonSize(Object v, int fallback) {
+        if (!(v instanceof Number)) return fallback;
+        double d = ((Number) v).doubleValue();
+        return d >= 28 && d <= 42 && d == Math.rint(d) ? (int) d : fallback;
     }
 
     /** clock_size: a whole number of sp from 24 to 72, or the fallback for anything else. */
