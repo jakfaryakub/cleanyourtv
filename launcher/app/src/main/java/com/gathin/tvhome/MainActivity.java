@@ -501,6 +501,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
         singleRow = cfg.singleRow;
+        rowWrap = cfg.rowWrap;
+        downOpensLibrary = cfg.downOpensLibrary;
         focusOvershoot = cfg.focusOvershoot;
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
@@ -1848,12 +1850,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         libraryFocusPending = false;
         libraryFromTopBar = false;
         libraryFromVpnPill = false;
+        libraryFromTile = -1;
         appLibrary = new AppLibraryDialog(this, animations, reducedMotion, appLibrarySelection, libraryOkOpens, adapter::containsPackage, () -> reloadApps(false), () -> {
             appLibrary = null;
             openPopup = null;
             if (libraryFromTopBar) {
                 libraryFromTopBar = false;
                 btnLibraryTop.requestFocus();
+                return;
+            }
+            if (libraryFromTile >= 0) {
+                int tile = libraryFromTile;
+                libraryFromTile = -1;
+                grid.post(() -> { if (appLibrary == null && !isFinishing()) focusTile(tile); });
                 return;
             }
             boolean fromVpnPill = libraryFromVpnPill;
@@ -2508,18 +2517,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.appCount();
         int target;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0) {
+            switch (GridNavigation.down(position, count, COLUMNS, singleRow, adapter.isLibraryAt(count), downOpensLibrary)) {
+                case GridNavigation.DOWN_PILL: focusLibrary(); return true;
+                case GridNavigation.DOWN_LIBRARY: openLibraryFromTile(position); return true;
+                case GridNavigation.DOWN_STAY: return true;
+                default: break;   // a grid row with one below it: moved further down
+            }
+        }
         if (singleRow) {
-            // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
-            // stopping at its two ends (the default focus search scrolls the row to the next tile).
+            // One row: Up leaves for the top bar, and Left/Right walk the whole row, stopping at its two ends
+            // (the default focus search scrolls the row to the next tile), or wrapping round with row_wrap.
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
             boolean forward = rtlAppGrid ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
             int last = adapter.focusablePosition(count - 1);
-            if (forward && position >= last) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
+            if (forward && position >= last && adapter.isLibraryAt(count)) {
+                focusLibrary();
                 return true;
             }
-            return !forward && position == 0;
+            if (rowWrap && wrapTo(GridNavigation.wrapTarget(Math.min(position, last), 0, last, rtlAppGrid,
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT), keyCode)) return true;
+            return forward ? position >= last : position == 0;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
@@ -2531,6 +2549,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
+            if (rowWrap) {
+                int rowStart = (position / COLUMNS) * COLUMNS;
+                int rowEnd = Math.min(rowStart + COLUMNS, rowCount) - 1;
+                if (wrapTo(GridNavigation.wrapTarget(position, rowStart, rowEnd, rtlAppGrid,
+                        keyCode == KeyEvent.KEYCODE_DPAD_LEFT), keyCode)) return true;
+            }
             return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
         }
@@ -2538,18 +2562,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
             target = position - COLUMNS;
         } else {
-            int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
-            if (position >= lastRowStart) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
-                return true;
-            }
-            target = Math.min(position + COLUMNS, count - 1);
+            target = Math.min(position + COLUMNS, count - 1);   // the last row's Down was handled above
         }
         focusTile(target);
         // The default focus search clicks for Left/Right; Up/Down are handled here, so click for them too.
         grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
                 ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
         return true;
+    }
+
+    /** row_wrap: focus the row's other end, with the scroll focusTile already animates; false for no wrap. */
+    private boolean wrapTo(int target, int keyCode) {
+        if (target < 0) return false;
+        focusTile(target);
+        grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                ? SoundEffectConstants.NAVIGATION_LEFT : SoundEffectConstants.NAVIGATION_RIGHT);
+        return true;
+    }
+
+    /** down_opens_library: open the App library from a tile; closing it comes back to that tile. */
+    private void openLibraryFromTile(int position) {
+        onLibraryRequested();
+        libraryFromTile = position;
+        grid.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN);
     }
 
     @Override public void onLibraryFocused() {
@@ -2871,6 +2906,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override public void onLibraryUp() {
         if (adapter.appCount() == 0) { firstTopButton().requestFocus(); return; }
+        if (singleRow) { focusTile(adapter.appCount() - 1); return; }   // the pill sits after the row's last tile
         int lastRow = ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
         focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
     }
@@ -3298,6 +3334,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View btnLibraryTop;
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
+    /** down_opens_library: the tile the App library was opened from, focused again when it closes; -1 for none. */
+    private int libraryFromTile = -1;
+    /** config.json row_wrap and down_opens_library. */
+    private boolean rowWrap, downOpensLibrary;
     /** The open library came from the VPN pill (vpn_pill, no VPN app): closing it returns there while the pill still shows. */
     private boolean libraryFromVpnPill;
 

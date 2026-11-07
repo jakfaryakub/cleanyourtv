@@ -7,7 +7,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class RowsAutohideTest {
-    static final int DPAD_RIGHT = 22, OK = 23, BACK = 4, VOLUME_UP = 24, MUTE = 164;
+    static final int DPAD_DOWN = 20, DPAD_RIGHT = 22, OK = 23, BACK = 4, VOLUME_UP = 24, MUTE = 164;
 
     @Test public void theRowGoesAfterTheWaitAndNotBefore() {
         RowsAutohide a = new RowsAutohide(30, 0);
@@ -38,6 +38,15 @@ public class RowsAutohideTest {
         // The next press moves the focus as usual.
         assertEquals(RowsAutohide.PASS, a.onKey(DPAD_RIGHT, true, 41_000));
         assertEquals(RowsAutohide.PASS, a.onKey(DPAD_RIGHT, false, 41_100));
+    }
+
+    @Test public void downOnAHiddenRowOnlyBringsItBackAndOpensNoLibrary() {
+        // down_opens_library: Down from the row opens the App library, but not as the key that reveals the row.
+        RowsAutohide a = new RowsAutohide(30, 0);
+        assertTrue(a.hideNow(30_000, false));
+        assertEquals(RowsAutohide.REVEAL, a.onKey(DPAD_DOWN, true, 40_000));
+        assertEquals(RowsAutohide.SWALLOW, a.onKey(DPAD_DOWN, false, 40_100));
+        assertEquals(RowsAutohide.PASS, a.onKey(DPAD_DOWN, true, 41_000));
     }
 
     @Test public void okOnAHiddenRowOpensNothing() {

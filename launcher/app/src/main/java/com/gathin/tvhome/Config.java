@@ -282,6 +282,10 @@ final class Config {
     final boolean headerShadow;
     /** Seconds without a key before Home's app row fades out (config.json rows_autohide_seconds), 0 for never. */
     final int rowsAutohideSeconds;
+    /** Left from a row's first tile goes to its last and Right from the last to the first (config.json row_wrap). */
+    final boolean rowWrap;
+    /** Down from Home's last row opens the App library (config.json down_opens_library); needs app_library. */
+    final boolean downOpensLibrary;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -331,8 +335,10 @@ final class Config {
                    String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
                    double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
-                   int rowsAutohideSeconds) {
+                   int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary) {
         this.font = font;
+        this.rowWrap = rowWrap;
+        this.downOpensLibrary = downOpensLibrary;
         this.rowsAutohideSeconds = rowsAutohideSeconds;
         this.headerShadow = headerShadow;
         this.topButtonSize = topButtonSize;
@@ -610,6 +616,8 @@ final class Config {
         int topButtonSize = 0;
         boolean headerShadow = false;
         int rowsAutohideSeconds = 0;
+        boolean rowWrap = false;
+        boolean downOpensLibrary = false;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -742,6 +750,8 @@ final class Config {
             topButtonSize = integer(json, "top_button_size", topButtonSize, 28, 42);
             headerShadow = bool(json, "header_shadow", headerShadow);
             rowsAutohideSeconds = integer(json, "rows_autohide_seconds", rowsAutohideSeconds, 0, 3600);
+            rowWrap = bool(json, "row_wrap", rowWrap);
+            downOpensLibrary = bool(json, "down_opens_library", downOpensLibrary);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -808,7 +818,7 @@ final class Config {
                 Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
                 font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
                 headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
-                topButtonSize, headerShadow, rowsAutohideSeconds);
+                topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */

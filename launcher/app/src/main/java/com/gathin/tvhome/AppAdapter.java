@@ -189,6 +189,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean dockRow;
     /** config single_row: tiles sit in one sideways row, each as wide as a grid column would be. */
     private final boolean singleRow;
+    /** config.xml rtl_app_grid: the row starts on the right, so the key back to it from the pill is Right. */
+    private final boolean rtlGrid;
     /** config always_show_names: the alpha of an unfocused tile's name (0 hides it). */
     private final float restNameAlpha;
     /** cinematic_home: only then does a launch record the last-opened app the shelf uses. */
@@ -244,13 +246,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.animations = cfg.animations;
         this.advancedEffects = cfg.animations && cfg.advancedEffects;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
-        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
+        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill, cfg.downOpensLibrary);
         this.reducedMotion = cfg.reducedMotion;
         this.focusOvershoot = cfg.focusOvershoot;
         this.rowsBelowDock = cfg.rowsBelowDock;
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
+        this.rtlGrid = ctx.getResources().getBoolean(R.bool.rtl_app_grid);
         this.appLogos = cfg.appLogos;
         this.logoTiles = Config.TILE_LOGO.equals(cfg.tileStyle);
         this.themeScale = cfg.focusScale;
@@ -421,7 +424,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             button.setOnFocusChangeListener((v, focused) -> { if (focused) listener.onLibraryFocused(); });
             button.setOnKeyListener((v, key, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (key == KeyEvent.KEYCODE_DPAD_UP) listener.onLibraryUp();
+                // Under a grid the pill is a footer: Up goes back to the last row. In a single row it sits after the
+                // last tile, so the key back towards the row (Left, or Right in a right-to-left grid) returns to it
+                // and Up goes on to the top bar, as from a tile. It used to take Left and send Up to the row.
+                int back = singleRow
+                        ? (rtlGrid ? KeyEvent.KEYCODE_DPAD_RIGHT : KeyEvent.KEYCODE_DPAD_LEFT)
+                        : KeyEvent.KEYCODE_DPAD_UP;
+                if (key == back) {
+                    listener.onLibraryUp();
+                    return true;
+                }
+                if (singleRow && key == KeyEvent.KEYCODE_DPAD_UP) return false;
                 return key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN
                         || key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT;
             });

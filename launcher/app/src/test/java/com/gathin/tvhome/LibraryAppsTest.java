@@ -16,6 +16,10 @@ public class LibraryAppsTest {
         assertFalse(LibraryApps.showPill(true, true, false));
         assertFalse(LibraryApps.showPill(false, true, true));
         assertFalse(LibraryApps.showPill(false, false, true));
+        // down_opens_library is another way in: show_library_pill false then hides the pill with no top-bar button.
+        assertFalse(LibraryApps.showPill(true, false, false, true));
+        assertTrue(LibraryApps.showPill(true, false, true, true));
+        assertFalse(LibraryApps.showPill(false, false, true, true));
     }
 
     @Test public void okOpensHomeAppsAndEveryAppWithTheSwitchButNeverInSelectionMode() {

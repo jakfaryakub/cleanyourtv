@@ -104,7 +104,12 @@ final class LibraryApps {
 
     /** The pill after the last Home row: show_library_pill false hides it only while the top-bar button is a way in. */
     static boolean showPill(boolean library, boolean button, boolean pill) {
-        return library && (pill || !button);
+        return showPill(library, button, pill, false);
+    }
+
+    /** As above; down_opens_library is another way in, so show_library_pill false hides the pill with it too. */
+    static boolean showPill(boolean library, boolean button, boolean pill, boolean downOpens) {
+        return library && (pill || !(button || downOpens));
     }
 
     /** A package on library_excluded_apps (config.xml): never offered in the catalogue, unlike hidden_apps,
