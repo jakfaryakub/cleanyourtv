@@ -19,7 +19,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
 | 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
-| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | next (surveyed, see below) |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | part 1 (code, tool, function test) done; part 2 (A/B with a real clip) next |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
 
 ## Phase 1b.1 result
@@ -268,6 +268,39 @@ Where the code changes go:
   `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts), the experiment's keys merged into its
   `config.json`, and the local `icons/`. Rebuild the copy whenever the repo theme changes; `theme.sh` sends `icons/`
   once 1b.1 adds it.
+
+## Phase 4a part 1 result
+
+Code, tool and a function test on the T6C (Android 12, `STT2.230203.001`), no A/B yet.
+
+- **Different from the survey.** The key is a bool, `"wallpaper_animated": true`, and the file has a fixed name,
+  `wallpaper.webp` beside `wallpaper.jpg`. ThemeProvider then needs one more name, not a pattern, and `theme.sh`
+  pushes it like `wallpaper.jpg` (and deletes it on `--reset` or when a theme has none).
+- `AnimatedWallpaper` holds the rules, unit tested: Android 9+, not with `reduced_motion`, at most 3 MB, a RIFF
+  length that matches the file, at most 1920×1080, decoded at no more than 960×540.
+- `WallpaperPlayer`: the JPG is still Home's first frame. The animation is decoded on the `decoder` thread
+  (`ImageDecoder`, `MEMORY_POLICY_LOW_RAM`) and replaces it; then the JPG bitmap is released. `start()`/`stop()`
+  play and pause it, `onTrimMemory` drops it and `start()` decodes it again, `wallpaper_dim` is a colour filter,
+  and rotation pauses while it plays. The API 28 calls sit in a nested `@RequiresApi(28)` class. APK 600,389 B,
+  lint 0 errors.
+- `tools/webp_wallpaper.py` cuts a video or GIF, turns it into frames with ffmpeg and encodes them with `img2webp`,
+  then checks against the limits (`--check` for any file). ffmpeg's own `libwebp_anim`, and `img2webp` without
+  `-kmax`, left stale blocks on a gradient: a mean error of 15 against the source frames, 1.3 with `-kmax 5`, at no
+  larger size. The tool now uses `-kmax 5`.
+- On the TV, with a 4 s gradient test clip at 960×540 and 15 fps (152 KB):
+  - It plays on Home: two screenshots 1 s apart differ by a mean of 35 per pixel.
+  - It stops while Settings is open (launcher 0.3% CPU over 10 s) and plays again back on Home.
+  - After `am send-trim-memory ... COMPLETE` with Home hidden, it plays again on return.
+  - `reduced_motion`, a file cut at 20 KB and a 2560×1440 file all keep the JPG, each with one
+    `TvHome.Wallpaper` log line. Before the length check, the cut file played its first frames with no warning.
+  - No FATAL in logcat.
+- **One quick number: launcher 30.6% of one core** (`top`, 10 s, Home idle, RES 101 MB). That is over the
+  survey's 20% limit, but nothing here compares it with Home without the animation.
+- Phase 1b.6 leftovers: Play Store (`shop`) and "Media" logos made with `logo.py --icon`.
+
+**Part 2 (next):** the A/B from the survey with a real clip, after a clean boot: `bench-home.sh`, idle CPU
+and frames, MemAvailable, against the same theme without `wallpaper_animated`. If idle CPU stays over 20%, try
+640×360 at 12-15 fps before deciding on 4b.
 
 ## Phase 4a survey
 
