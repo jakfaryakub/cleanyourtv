@@ -160,3 +160,87 @@ class ShadowTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+FONT = ROOT / "examples" / "tcl-t6c-indonesia" / "theme" / "fonts" / "plus-jakarta-sans.ttf"
+
+
+class IconRefusalTest(unittest.TestCase):
+    """--icon NAME --text TEXT <package>: a Material Symbol from tools/material-symbols with a name beside it."""
+
+    def test_an_icon_that_is_not_in_the_folder_is_refused(self):
+        result = run("--icon", "no_such_symbol", "--text", "TV", "com.example.app", "--font", str(FONT))
+        self.assertEqual(2, result.returncode)
+        self.assertIn("material-symbols", result.stderr)
+
+    def test_a_path_is_not_an_icon_name(self):
+        result = run("--icon", "../material-symbols/settings", "--text", "TV", "com.example.app", "--font", str(FONT))
+        self.assertEqual(2, result.returncode)
+
+    def test_icon_needs_text_and_one_package(self):
+        self.assertEqual(2, run("--icon", "settings", "com.example.app", "--font", str(FONT)).returncode)
+        self.assertEqual(2, run("--icon", "settings", "--text", "TV", "--font", str(FONT)).returncode)
+        self.assertEqual(2, run("--icon", "settings", "--text", "TV", "a.svg", "com.example.app").returncode)
+
+    def test_a_missing_font_is_refused(self):
+        result = run("--icon", "settings", "--text", "TV", "com.example.app", "--font", "/nonexistent/font.ttf")
+        self.assertEqual(2, result.returncode)
+        self.assertIn("font", result.stderr)
+
+    def test_icon_is_always_white(self):
+        result = run("--icon", "settings", "--text", "TV", "com.example.app", "--font", str(FONT), "--fill", "#000")
+        self.assertEqual(2, result.returncode)
+
+    def test_text_and_font_belong_to_icon(self):
+        self.assertEqual(2, run("a.svg", "com.example.app", "--text", "TV").returncode)
+
+    def test_every_listed_symbol_is_shipped_with_the_licence(self):
+        folder = ROOT / "tools" / "material-symbols"
+        self.assertIn("Apache License", (folder / "LICENSE").read_text())
+        readme = (folder / "README.md").read_text()
+        for svg in folder.glob("*.svg"):
+            self.assertIn(f"`{svg.name}`", readme)
+
+
+class AlphaBoxTest(unittest.TestCase):
+    def test_the_box_holds_only_the_drawn_pixels(self):
+        if shutil.which("rsvg-convert") is None:
+            self.skipTest("needs rsvg-convert")
+        with tempfile.TemporaryDirectory() as tmp:
+            svg = Path(tmp) / "box.svg"
+            svg.write_text('<svg xmlns="http://www.w3.org/2000/svg" width="40" height="30">'
+                           '<rect x="5" y="7" width="20" height="10" fill="#fff"/></svg>')
+            png = Path(tmp) / "box.png"
+            subprocess.run(["rsvg-convert", "-f", "png", "-o", str(png), str(svg)], check=True)
+            self.assertEqual((5, 7, 25, 17), logo.alpha_box(png.read_bytes()))
+
+
+@unittest.skipIf(shutil.which("rsvg-convert") is None, "needs rsvg-convert")
+class IconRenderTest(unittest.TestCase):
+    def setUp(self):
+        self._tmp = tempfile.TemporaryDirectory()
+        self.icons = Path(self._tmp.name)
+
+    def tearDown(self):
+        self._tmp.cleanup()
+
+    def render(self, text, *extra):
+        result = run("--icon", "settings", "--text", text, "com.example.app", "--font", str(FONT),
+                     "--out", str(self.icons), *extra)
+        self.assertEqual(0, result.returncode, result.stderr)
+        return png_info(self.icons / "com.example.app.png")
+
+    def test_a_short_name_keeps_the_full_height(self):
+        width, height, kind = self.render("TV")
+        self.assertEqual((120, 6), (height, kind))
+        self.assertGreater(width, 120 * (1 + logo.TEXT_GAP))   # the icon, the gap, then the text
+
+    def test_a_long_name_scales_the_logo_to_the_max_width(self):
+        width, height, _ = self.render("Media Player")
+        self.assertEqual(360, width)
+        self.assertLess(height, 120)
+
+    def test_the_icon_logo_takes_a_shadow_too(self):
+        width, height, _ = self.render("TV", "--shadow")
+        margin = logo.shadow_margin(8, logo.SHADOW_DROP)
+        self.assertEqual(120 + 2 * margin, height)
