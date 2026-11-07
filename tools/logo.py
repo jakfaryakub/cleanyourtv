@@ -3,13 +3,17 @@
 
 Usage:
     tools/logo.py <source.svg|.png> <package> [--out DIR] [--height 120] [--max-width 360] [--fill '#FFFFFF']
+                  [--shadow [--shadow-blur 8] [--shadow-opacity 0.85]]
 
     tools/logo.py work/theme-ref/logo-src/netflix-2015.svg com.netflix.ninja
     tools/logo.py work/theme-ref/logo-src/prime-video-2024.svg com.amazon.amazonvideo.livingroom --fill '#FFFFFF'
 
 The logo is rendered with its transparency kept, `--height` px high (120 by default); a logo that would then be
 wider than `--max-width` (360) is rendered at that width instead, a little lower. `--fill` paints every coloured
-part of an SVG in one colour, for a dark wordmark that would vanish on a dark tile. The file goes to
+part of an SVG in one colour, for a dark wordmark that would vanish on a dark tile. `--shadow` bakes a soft dark
+shadow under the logo, for a logo drawn with no card (tile_style "logo") over a light wallpaper: the PNG gets a
+transparent margin for it and stays inside --height and --max-width, so the launcher draws it at no extra cost.
+The file goes to
 `--out` (work/theme-ref/icons by default, which git ignores) as <package>.png, the name tools/theme.sh and the
 launcher take.
 
@@ -37,6 +41,7 @@ DEFAULT_OUT = ROOT / "work" / "theme-ref" / "icons"
 PACKAGE = re.compile(r"[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+")
 COLOUR = re.compile(r"#[0-9A-Fa-f]{3}|#[0-9A-Fa-f]{6}")
 PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
+SHADOW_DROP = 3   # px the shadow sits below the logo
 
 
 def png_size(data):
@@ -75,6 +80,26 @@ def wrap_png(data):
             f'<image width="{width}" height="{height}" xlink:href="data:image/png;base64,{encoded}"/></svg>')
 
 
+def shadow_margin(blur, dy):
+    """Room the shadow needs on each side: three blur radii, plus the drop below."""
+    return int(blur * 3 + 0.999) + dy
+
+
+def with_shadow(data, blur, opacity, dy):
+    """The rendered logo, as an SVG on a canvas widened by the margin, over a blurred dark copy of itself."""
+    width, height = png_size(data)
+    margin = shadow_margin(blur, dy)
+    encoded = base64.b64encode(data).decode("ascii")
+    image = f'width="{width}" height="{height}" xlink:href="data:image/png;base64,{encoded}"'
+    return (f'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" '
+            f'width="{width + 2 * margin}" height="{height + 2 * margin}">'
+            f'<filter id="shadow" x="-50%" y="-50%" width="200%" height="200%">'
+            f'<feColorMatrix type="matrix" values="0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 {opacity} 0"/>'
+            f'<feGaussianBlur stdDeviation="{blur}"/></filter>'
+            f'<image x="{margin}" y="{margin + dy}" {image} filter="url(#shadow)"/>'
+            f'<image x="{margin}" y="{margin}" {image}/></svg>')
+
+
 def render(rsvg, svg_path, out_path, height, max_width):
     """Renders at `height`; if that is wider than `max_width`, again at that width. Returns (width, height)."""
     for size_args in (["-h", str(height)], ["-w", str(max_width)]):
@@ -96,6 +121,9 @@ def main(argv=None):
     parser.add_argument("--height", type=int, default=120)
     parser.add_argument("--max-width", type=int, default=360)
     parser.add_argument("--fill", help="one colour for the whole logo, e.g. '#FFFFFF' (SVG only)")
+    parser.add_argument("--shadow", action="store_true", help="bake a soft dark shadow under the logo")
+    parser.add_argument("--shadow-blur", type=int, default=8, help="the shadow's blur radius in px (1-30)")
+    parser.add_argument("--shadow-opacity", type=float, default=0.85, help="the shadow's opacity (0.1-1)")
     args = parser.parse_args(argv)
 
     if not PACKAGE.fullmatch(args.package):
@@ -106,6 +134,14 @@ def main(argv=None):
         return 2
     if args.fill is not None and not COLOUR.fullmatch(args.fill):
         print(f"--fill takes a colour like '#FFFFFF', not {args.fill}. Nothing was written.", file=sys.stderr)
+        return 2
+    if not 1 <= args.shadow_blur <= 30 or not 0.1 <= args.shadow_opacity <= 1:
+        print("--shadow-blur takes 1 to 30 px and --shadow-opacity 0.1 to 1. Nothing was written.", file=sys.stderr)
+        return 2
+    margin = shadow_margin(args.shadow_blur, SHADOW_DROP) if args.shadow else 0
+    if args.shadow and (args.height <= 2 * margin or args.max_width <= 2 * margin):
+        print(f"--height and --max-width must leave room for the shadow's {margin} px margin. Nothing was written.",
+              file=sys.stderr)
         return 2
     suffix = args.source.suffix.lower()
     if suffix not in (".svg", ".png") or not args.source.is_file():
@@ -137,7 +173,13 @@ def main(argv=None):
         svg_path = Path(tmp) / "logo.svg"
         svg_path.write_text(svg, encoding="utf-8")
         try:
-            width, height = render(rsvg, svg_path, out_path, args.height, args.max_width)
+            width, height = render(rsvg, svg_path, out_path, args.height - 2 * margin, args.max_width - 2 * margin)
+            if args.shadow:
+                shadowed = Path(tmp) / "shadow.svg"
+                shadowed.write_text(with_shadow(out_path.read_bytes(), args.shadow_blur, args.shadow_opacity,
+                                                SHADOW_DROP), encoding="utf-8")
+                subprocess.run([rsvg, "-f", "png", "-o", str(out_path), str(shadowed)], check=True, capture_output=True)
+                width, height = png_size(out_path.read_bytes())
         except (subprocess.CalledProcessError, ValueError) as error:
             detail = getattr(error, "stderr", b"") or b""
             print(f"rsvg-convert failed for {args.source}: {detail.decode(errors='replace').strip() or error}",

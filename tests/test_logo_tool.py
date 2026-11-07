@@ -114,8 +114,40 @@ class RenderTest(unittest.TestCase):
         png = (self.icons / "com.example.app.png").read_bytes()
         self.assertEqual((360, 90, 6), self.render("small.png", png))
 
+    def test_a_shadowed_logo_stays_inside_the_limits(self):
+        # The logo is drawn 66 px high (120 less the 27 px margin twice), 264 px wide, then the margin is added.
+        self.assertEqual((318, 120, 6), self.render("wide.svg", WIDE_SVG, "--shadow"))
+
+    def test_a_shadowed_square_logo_keeps_the_full_height(self):
+        self.assertEqual((120, 120, 6), self.render("square.svg", SQUARE_SVG, "--shadow"))
+
     def test_fill_renders_in_the_one_colour(self):
         self.assertEqual((120, 120, 6), self.render("square.svg", SQUARE_SVG, "--fill", "#FFFFFF"))
+
+
+class ShadowTest(unittest.TestCase):
+    def test_the_margin_holds_the_blur_and_the_drop(self):
+        self.assertEqual(27, logo.shadow_margin(8, 3))
+        self.assertEqual(4, logo.shadow_margin(1, 1))
+
+    def test_the_shadow_is_a_blurred_dark_copy_under_the_logo(self):
+        png = logo.PNG_SIGNATURE + b"\x00\x00\x00\x0dIHDR" + struct.pack(">II", 100, 40) + b"\x08\x06\x00\x00\x00"
+        svg = logo.with_shadow(png, 8, 0.85, 3)
+        self.assertIn('width="154" height="94"', svg)
+        self.assertIn('stdDeviation="8"', svg)
+        self.assertIn("0 0 0 0.85 0", svg)
+        self.assertLess(svg.index('filter="url(#shadow)"'), svg.rindex("<image"), "the shadow is drawn first")
+
+    def test_shadow_settings_out_of_range_are_refused(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "logo.svg"
+            source.write_text(WIDE_SVG)
+            for extra in (["--shadow-blur", "0"], ["--shadow-blur", "31"], ["--shadow-opacity", "0"],
+                          ["--shadow", "--height", "40"]):
+                with self.subTest(extra=extra):
+                    result = run(str(source), "com.example.app", "--out", str(Path(tmp) / "icons"), *extra)
+                    self.assertEqual(2, result.returncode)
+            self.assertFalse((Path(tmp) / "icons").exists())
 
 
 if __name__ == "__main__":
