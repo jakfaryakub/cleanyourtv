@@ -10,10 +10,56 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 |---|---|---|
 | 0 | APK size gate 640 KB for this fork, performance baseline | done |
 | 1a | Theme font: `font` (a `.ttf`/`.otf` in the theme's `fonts/`) and `font_scale` (0.85-1.25) | done |
-| 1b | Custom icon or banner per app from the theme folder | not started |
+| 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | not started |
+| 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | not started |
+| 1b.2 | Logo tiles with no card, focus by scale only: `tile_style: "logo"`, `focus_frame: false`, `focus_scale` | not started |
+| 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started |
+| 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | not started |
+| 1b.5 | Minimal header: small clock and date top right, clock size as a key (`header_position`, `clock_size`); low priority | not started |
 | 2 | Tile size, gaps and label size as theme keys | not started |
 | 3 | Theme picker on the TV, with the remote | not started |
-| 4 | Animated wallpaper (GIF/animated WebP), if memory allows; no video | not started |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | not started |
+| 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
+
+## Phase 1b target
+
+Home like a Projectivy-style reference: a full-screen wallpaper, one row of brand wordmark logos with no tile card,
+focus by scale with no frame or glow, the row hidden while idle, and a small header top right.
+
+What existing keys already give (survey of 2026-11-07):
+
+| Reference point | Keys | State |
+|---|---|---|
+| Full-screen wallpaper | `wallpaper`, `wallpaper_dim`, `cinematic_home: false`, `ambient_glow: false`, `dock_title: false` | there (still image) |
+| One row at the bottom | `single_row`, `dock_row`, `rows_below_dock: 0`, `dock_band: false` | there |
+| Logos with no card | `uniform_tiles` hides the label but keeps a tinted card; per-app art only from APK resources | missing |
+| Focus by scale only | glow keys off; `glass_style: "rim"` still draws a 2dp outline; scale fixed at 1.10/1.12 | partly |
+| Row hidden while idle | `fade_rows` only fades on scroll; `home_idle_clock_minutes` opens the clock screen | missing |
+| Small header top right | `show_greeting: false`, `icon_only_buttons`, `show_inputs_pill: false`; clock stays top left at 52sp | partly |
+
+Where the code changes go:
+
+- 1b.1: `ThemeFiles` (an `icons/` pattern), `ThemeProvider.delete`, `tools/theme.sh` and `theme.ps1` (push and
+  clear `icons/`, like `fonts/`), a new `ThemeIcons` loader modelled on `ThemeFont` (cache on
+  path:length:lastModified, `inSampleSize` to the tile size, ARGB_8888 for alpha), called first in `AppAdapter.reload()`.
+- 1b.2: card background `null`, label gone, banner `fitCenter` and no outline clip in `AppAdapter` bind; the
+  `GlassView` kept hidden in `MainActivity.onTileFocused`; `focusScale()` reads `focus_scale`.
+- 1b.3: the idle timer that `onUserInteraction` already restarts; the first key only shows the row.
+- Logos are trademarks: they stay in the local theme (`work/`, ignored by git), never in the repo or the APK.
+  Convert each SVG to a transparent PNG about 120 px high and at most 360 px wide.
+- 1b.4: `tools/theme.sh` pushes one folder, so the combined theme is built in `work/theme-ref/`: a copy of
+  `examples/tcl-t6c-indonesia/theme/` (config, wallpaper, fonts), the experiment's keys merged into its
+  `config.json`, and the local `icons/`. Rebuild the copy whenever the repo theme changes; `theme.sh` sends `icons/`
+  once 1b.1 adds it.
+
+## Phase 4 measurements to start from
+
+The T6C has 4 Cortex-A55 cores at up to 1.07 GHz and 1.8 GB of RAM. It has hardware decoders for AVC, HEVC, VP9 and
+AV1 (`OMX.realtek.video.decoder`). An animated WebP is decoded in software on the CPU; a 1080p frame in ARGB costs
+about 8.3 MB, so two frames are about 16.6 MB, more than the +8 MB budget. Start with 960×540 at 15-20 fps (about
+4 MB), stop it in `onPause`, and measure PSS, CPU (`top`), janky frames and GPU p90 before setting the limit.
+MP4 through a hardware decoder costs little CPU but breaks the "no video" rule in `AGENTS.md`, `CONTRIBUTING.md` and
+`docs/launcher.md`, holds a decoder the streaming apps need, and a `TextureView` adds GPU work on every frame.
 
 ## Phase 1a result
 
