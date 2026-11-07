@@ -14,11 +14,11 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done |
 | 1b.2 | Logo tiles with no card, focus by scale and opacity: `tile_style: "logo"`, `focus_frame: false`, `focus_scale`, `unfocused_opacity` | done |
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | done (by hand, see below) |
-| 1b.5 | Minimal header top right (`header_position`, `clock_size`, `top_button_size`) with today's five prayer times under it (`prayer_times`), computed offline | done (variant A); date fix to verify after a cold boot |
-| 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started, after 1b.5 |
-| 2 | Tile size, gaps and label size as theme keys | not started |
-| 3 | Theme picker on the TV, with the remote | not started |
-| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | not started |
+| 1b.5 | Minimal header top right (`header_position`, `clock_size`, `top_button_size`, `header_shadow`) with today's five prayer times under it (`prayer_times`), computed offline | done |
+| 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | done |
+| 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
+| 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
+| 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | next |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not decided |
 
 ## Phase 1b.1 result
@@ -70,6 +70,30 @@ run 90 s after its push:
 | Janky frames | 0.00% | 0.00% | 0.00% |
 
 The logo row draws as fast as the cards, and its PSS is about 1 MB lower (no glass, no card fills).
+
+## Phase 1b done
+
+Phase 1b is finished: logos from the theme (1b.1), logo tiles with focus by scale and opacity (1b.2), the
+minimal header with prayer times (1b.5) and the app row hidden while idle (1b.3). Left: 4a (animated wallpaper,
+measure first) and 3 (theme picker on the TV).
+
+`header_shadow` puts a soft shadow under the clock, the date and the prayer line. `rows_autohide_seconds` (30 in the
+experiment theme) fades the app row out after that many idle seconds; the first key, or Home, only brings it back
+on the same tile (`RowsAutohide`, unit tested), and it never hides while tiles move or a menu or dialog is open.
+
+A/B/A after a clean boot, the experiment theme without (A) and with (B) `header_shadow` and `rows_autohide_seconds`:
+
+| | A | B | A again |
+|---|---|---|---|
+| Uptime | 6 min | 10 min | 14 min |
+| MemAvailable / SwapFree | 967,828 / 368,636 kB | 951,960 / 370,940 kB | 958,280 / 371,196 kB |
+| PSS after warm-up | 47,188 KB | 46,955 KB | 46,408 KB |
+| PSS after keys | 36,341 KB | 36,023 KB | 35,522 KB |
+| Frame p50 / p90 | 7 / 7 ms | 7 / 7 ms | 7 / 7 ms |
+| GPU p50 / p90 | 5 / 6 ms | 5 / 6 ms | 5 / 6 ms |
+| Janky frames | 0.00% | 0.00% | 0.24% |
+
+Neither key costs memory or frame time that the runs can tell apart.
 
 ## Phase 1b.5 result
 
@@ -127,9 +151,8 @@ Maghrib 51 / 42, Isha 36 / 57. It is a golden test now.
 Variant A was chosen: a large clock (`clock_size` 64) with the date under it (`date_below_clock`), round buttons at
 34 dp (`top_button_size`), and the prayer line at least the date's size with wider gaps.
 
-**To verify after the next cold boot (unplug):** the date at the top right whole, with no letter cut at either end.
-The fix (the date's lines wrap their text) was checked after theme pushes only, and the bug showed after a cold
-boot; it is not proven until the date is whole after one. The top right reads as crowded: three layouts are drawn
+**Verified after a cold boot (unplugged, 2026-11-07 21:07, uptime 0 min):** the date at the top right whole,
+"SATURDAY 7 NOVEMBER" with nothing cut at either end (`uiautomator`: 397 px wide, ending at x 1600). The top right reads as crowded: three layouts are drawn
 as mock-ups for a choice (A: date under a large clock, B: prayers top left, C: prayers above the app row).
 
 ## Phase 1b.5 plan: minimal header and prayer times

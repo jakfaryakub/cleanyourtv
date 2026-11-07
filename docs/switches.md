@@ -83,3 +83,5 @@ rule sit on its wanted list until a screenshot arrives.
 | `prayer_longitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_longitude 106.8311 on a TV: the prayer times for Jakarta under the clock"> |
 | `prayer_ihtiyat` | <img src="switches/header_position.jpg" width="320" alt="prayer_ihtiyat 2 on a TV: the prayer times under the clock with Kemenag's two minutes added"> |
 | `top_button_size` | <img src="switches/header_position.jpg" width="320" alt="top_button_size 34 on a TV: the Wi-Fi and Settings buttons smaller beside the clock"> |
+| `header_shadow` | <img src="switches/header_position.jpg" width="320" alt="header_shadow on a TV: the clock, the date and the prayer line with a soft dark shadow over the wallpaper"> |
+| `rows_autohide_seconds` | <img src="switches/rows_autohide_seconds.jpg" width="320" alt="rows_autohide_seconds 30 on a TV: Home after 30 idle seconds, the app row gone, the clock, date and prayer times still at the top right"> |
