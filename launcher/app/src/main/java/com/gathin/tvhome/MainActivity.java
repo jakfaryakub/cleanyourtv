@@ -2592,9 +2592,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             clockRow.addView(divider, 1);
         }
         clockRow.setGravity(Gravity.RIGHT | Gravity.BOTTOM);
+        // The column wraps its lines now, so they must wrap too: a match_parent TextView does not ask for a new layout
+        // when its text gets longer. After a cold boot the date first reads the day the TV wakes with and, once the
+        // clock syncs, a longer one ("SATURDAY 7 NOVEMBER"), which then lost both ends (moveDateBelowClock, the same).
         for (int i = 0; i < dateColumn.getChildCount(); i++) {
             View line = dateColumn.getChildAt(i);
-            if (line instanceof TextView) ((TextView) line).setGravity(Gravity.RIGHT);
+            if (!(line instanceof TextView)) continue;
+            ((TextView) line).setGravity(Gravity.RIGHT);
+            LinearLayout.LayoutParams lineLp = (LinearLayout.LayoutParams) line.getLayoutParams();
+            lineLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            lineLp.gravity = Gravity.RIGHT;
+            line.setLayoutParams(lineLp);
         }
         TextView greeting = findViewById(R.id.greeting);
         greeting.setGravity(Gravity.RIGHT);
