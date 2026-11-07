@@ -12,7 +12,7 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1a | Theme font: `font` (a `.ttf`/`.otf` in the theme's `fonts/`) and `font_scale` (0.85-1.25) | done |
 | 1b.0 | Reference look from existing keys only, in a local theme (`work/theme-ref/`) | not started |
 | 1b.1 | App logo from the theme: `icons/<package>.png`, key `app_logos` | done |
-| 1b.2 | Logo tiles with no card, focus by scale only: `tile_style: "logo"`, `focus_frame: false`, `focus_scale` | not started |
+| 1b.2 | Logo tiles with no card, focus by scale and opacity: `tile_style: "logo"`, `focus_frame: false`, `focus_scale`, `unfocused_opacity` | done |
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | not started |
 | 1b.4 | Combined theme push: the repo's T6C theme plus local logos from `work/theme-ref/icons/`, no logo in Git | not started |
 | 1b.5 | Minimal header: small clock and date top right, clock size as a key (`header_position`, `clock_size`); low priority | not started |
@@ -46,6 +46,30 @@ A/B/A with `tools/bench-home.sh`, the same theme without and with `app_logos`, r
 The logos add no PSS that the runs can tell apart. All three runs were in the slow-GPU state from the backlog, so
 their jank is not comparable with the 14:36 baseline. After a clean boot the logos cost nothing either: 7 ms p50
 and 0% janky with and without them (runs 2 and 3 in the backlog entry below).
+
+## Phase 1b.2 result
+
+`tile_style: "logo"` draws Home's app tiles with no card; an app without a logo shows its name as a white wordmark
+in the theme font. `focus_frame: false` hides the glass (it still shows while tiles are moved), `focus_scale` sets
+the zoom (1.0-1.3), and `unfocused_opacity` (0.3-1.0) dims every tile in the row that is not focused, module cards'
+art included, on the art views only, with no layer. `tools/logo.py --shadow` bakes a soft shadow into the PNG in a
+margin outside the logo's box and names the margin in a tEXt chunk, so the logo keeps its size. The experiment
+theme uses 1.2 and 0.5, and keeps Prayer Times off Home with `hidden_apps`.
+
+A/B/A after a clean boot, the experiment theme with `app_logos` (A) against the same with the four keys (B), each
+run 90 s after its push:
+
+| | A, cards | B, logos | A again |
+|---|---|---|---|
+| Uptime | 10 min | 13 min | 17 min |
+| MemAvailable / SwapFree | 960,436 / 388,348 kB | 975,600 / 377,852 kB | 974,000 / 379,132 kB |
+| PSS after warm-up | 49,702 KB | 47,961 KB | 48,849 KB |
+| PSS after keys | 39,636 KB | 38,395 KB | 39,073 KB |
+| Frame p50 / p90 | 7 / 7 ms | 7 / 7 ms | 7 / 7 ms |
+| GPU p50 / p90 | 6 / 6 ms | 6 / 6 ms | 6 / 6 ms |
+| Janky frames | 0.00% | 0.00% | 0.00% |
+
+The logo row draws as fast as the cards, and its PSS is about 1 MB lower (no glass, no card fills).
 
 ## Phase 1b target
 
