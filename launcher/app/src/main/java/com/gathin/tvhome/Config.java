@@ -998,6 +998,11 @@ final class Config {
         }
     }
 
+    /** A theme's config.json as read(): null for anything Home would not use (ThemeSlots, the picker). */
+    static JSONObject readTheme(File file) {
+        return read(file);
+    }
+
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */
     /**
      * The overlay, or before external storage is mounted, the copy kept from the last time it was read. Home can

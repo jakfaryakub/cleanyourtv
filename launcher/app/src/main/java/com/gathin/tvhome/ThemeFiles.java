@@ -1,5 +1,7 @@
 package com.gathin.tvhome;
 
+import java.io.File;
+import java.io.IOException;
 import java.util.List;
 import java.util.regex.Pattern;
 
@@ -133,5 +135,14 @@ final class ThemeFiles {
 
     static boolean collectionImage(String name) {
         return name != null && !name.startsWith(".") && IMAGE.matcher(name).matches();
+    }
+
+    /** A second guard behind path(): the file must resolve under root, links followed. */
+    static boolean inside(File root, File f) {
+        try {
+            return f.getCanonicalPath().startsWith(root.getCanonicalPath() + File.separator);
+        } catch (IOException e) {
+            return false;
+        }
     }
 }
