@@ -107,4 +107,59 @@ public class ThemeFilesTest {
         assertNull(ThemeFiles.iconName("netflix"));
         assertNull(ThemeFiles.iconName("../x.y"));
     }
+
+    @Test public void slotFilesAreAllowed() {
+        assertEquals("themes/red-eyes/config.json", ThemeFiles.path(Arrays.asList("themes", "red-eyes", "config.json")));
+        assertEquals("themes/red-eyes/wallpaper.jpg", ThemeFiles.path(Arrays.asList("themes", "red-eyes", "wallpaper.jpg")));
+        assertEquals("themes/p1/wallpaper.webp", ThemeFiles.path(Arrays.asList("themes", "p1", "wallpaper.webp")));
+        assertEquals("themes/p1/wallpapers/dusk.jpg", ThemeFiles.path(Arrays.asList("themes", "p1", "wallpapers", "dusk.jpg")));
+        assertEquals("themes/p1/fonts/inter.ttf", ThemeFiles.path(Arrays.asList("themes", "p1", "fonts", "inter.ttf")));
+        assertEquals("themes/p1/icons/com.netflix.ninja.png",
+                ThemeFiles.path(Arrays.asList("themes", "p1", "icons", "com.netflix.ninja.png")));
+        assertEquals("active_theme", ThemeFiles.path(Collections.singletonList("active_theme")));
+    }
+
+    @Test public void otherSlotPathsAreRefused() {
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "theme_revision")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "active_theme")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1")));
+        assertNull(ThemeFiles.path(Collections.singletonList("themes")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "..", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "Red", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "-a", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "legacy", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "builtin", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "themes", "p2", "config.json")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "wallpapers", "..")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "fonts", "sub", "a.ttf")));
+        assertNull(ThemeFiles.path(Arrays.asList("themes", "p1", "notes.txt")));
+    }
+
+    @Test public void slugs() {
+        assertTrue(ThemeFiles.slug("purple-eyes"));
+        assertTrue(ThemeFiles.slug("a"));
+        assertTrue(ThemeFiles.slug("0123456789abcdef0123456789abcdef"));
+        assertFalse(ThemeFiles.slug("0123456789abcdef0123456789abcdef0"));
+        assertFalse(ThemeFiles.slug(null));
+        assertFalse(ThemeFiles.slug(""));
+        assertFalse(ThemeFiles.slug("-a"));
+        assertFalse(ThemeFiles.slug("Red"));
+        assertFalse(ThemeFiles.slug("a_b"));
+        assertFalse(ThemeFiles.slug("a.b"));
+        assertFalse(ThemeFiles.slug("a/b"));
+        assertFalse(ThemeFiles.slug("legacy"));
+        assertFalse(ThemeFiles.slug("builtin"));
+    }
+
+    @Test public void slotFoldersAreFoundUnderTheSlot() {
+        assertEquals("red-eyes", ThemeFiles.slot(Arrays.asList("themes", "red-eyes")));
+        assertNull(ThemeFiles.slot(Arrays.asList("themes", "Red")));
+        assertNull(ThemeFiles.slot(Arrays.asList("themes", "red-eyes", "config.json")));
+        assertTrue(ThemeFiles.isThemes(Collections.singletonList("themes")));
+        assertEquals("themes/p1/", ThemeFiles.prefix(Arrays.asList("themes", "p1", "icons")));
+        assertTrue(ThemeFiles.isIcons(ThemeFiles.inner(Arrays.asList("themes", "p1", "icons"))));
+        assertTrue(ThemeFiles.isFonts(ThemeFiles.inner(Arrays.asList("themes", "p1", "fonts"))));
+        assertTrue(ThemeFiles.isCollection(ThemeFiles.inner(Arrays.asList("themes", "p1", "wallpapers"))));
+        assertEquals("", ThemeFiles.prefix(Collections.singletonList("icons")));
+    }
 }
