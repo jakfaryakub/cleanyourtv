@@ -69,3 +69,27 @@ rule sit on its wanted list until a screenshot arrives.
 | `game_day` | <img src="switches/game_day.jpg" width="320" alt="game_day: Minnesota Vikings at Detroit Lions, Kickoff in 5d 13h, with four dots, under the clock on a TV"> |
 | `clock_format` | <img src="switches/clock_format.jpg" width="320" alt="clock_format on a TV"> |
 | `glow_snap` | <img src="switches/glow_snap.jpg" width="320" alt="glow_snap on a TV: the glow in Netflix red behind the dock"> |
+| `font` | <img src="switches/font.jpg" width="320" alt="font on a TV: Home in Plus Jakarta Sans, the clock, date, app name and top bar"> |
+| `font_scale` | <img src="switches/font_scale.jpg" width="320" alt="font_scale 1.25 on a TV: larger clock, date and tile name, the long name ending in an ellipsis"> |
+| `app_logos` | <img src="switches/app_logos.jpg" width="320" alt="app_logos on a TV: the YouTube, Netflix, Vidio, Prime Video and bilibili wordmarks centred on dark tiles in one row"> |
+| `tile_style` | <img src="switches/tile_style.jpg" width="320" alt="tile_style logo on a TV: the YouTube, Netflix, Vidio, Prime Video and bilibili logos in one row with no cards, YouTube focused and larger"> <img src="switches/tile_style_wordmark.jpg" width="320" alt="tile_style logo on a TV: Media Player and Play Store as white wordmarks, Play Store focused, after a dimmed module card"> |
+| `focus_frame` | <img src="switches/tile_style.jpg" width="320" alt="focus_frame false on a TV: the focused YouTube logo marked by its zoom alone, with no highlight around it"> |
+| `focus_scale` | <img src="switches/tile_style.jpg" width="320" alt="focus_scale 1.2 on a TV: the focused YouTube logo a fifth larger than the others"> |
+| `unfocused_opacity` | <img src="switches/unfocused_opacity.jpg" width="320" alt="unfocused_opacity 0.5 with animations false on a TV: Netflix focused at full opacity, the other logos at half"> |
+| `header_position` | <img src="switches/header_position.jpg" width="320" alt="header_position end with date_below_clock on a TV: a large clock top right with the date under it, beside two small buttons"> |
+| `clock_size` | <img src="switches/header_position.jpg" width="320" alt="clock_size 64 on a TV: the clock top right larger than the default 52, the date under it at its usual size"> |
+| `prayer_times` | <img src="switches/header_position.jpg" width="320" alt="prayer_times on a TV after Isha: the next day's Fajr 04:07 in bold, then Dhuhr 11:40, Asr 14:59, Maghrib 17:51 and Isha 19:03 under the date"> |
+| `prayer_latitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_latitude -6.1701 on a TV: the prayer times for Jakarta under the clock"> |
+| `prayer_longitude` | <img src="switches/header_position.jpg" width="320" alt="prayer_longitude 106.8311 on a TV: the prayer times for Jakarta under the clock"> |
+| `prayer_ihtiyat` | <img src="switches/header_position.jpg" width="320" alt="prayer_ihtiyat 2 on a TV: the prayer times under the clock with Kemenag's two minutes added"> |
+| `top_button_size` | <img src="switches/header_position.jpg" width="320" alt="top_button_size 34 on a TV: the Wi-Fi and Settings buttons smaller beside the clock"> |
+| `header_shadow` | <img src="switches/header_position.jpg" width="320" alt="header_shadow on a TV: the clock, the date and the prayer line with a soft dark shadow over the wallpaper"> |
+| `rows_autohide_seconds` | <img src="switches/rows_autohide_seconds.jpg" width="320" alt="rows_autohide_seconds 30 on a TV: Home after 30 idle seconds, the app row gone, the clock, date and prayer times still at the top right"> |
+| `row_wrap` | <img src="switches/row_wrap.jpg" width="320" alt="row_wrap on a TV: Left from Media Player, the first tile, put focus on Weather, the last tile of the row"> |
+| `down_opens_library` | <img src="switches/down_opens_library.jpg" width="320" alt="down_opens_library on a TV: Down from the only row opened the App library over Home"> |
+| `wallpaper_animated` | <img src="switches/wallpaper_animated.jpg" width="320" alt="wallpaper_animated on a TV: a moving gradient test clip as Home's wallpaper behind the clock, the prayer line and the app row"> |
+| `wallpaper_pause_seconds` | <img src="switches/wallpaper_animated.jpg" width="320" alt="wallpaper_pause_seconds on a TV: the animated wallpaper, which holds on its frame after that many seconds with no key"> |
+| `wallpaper_smooth` | <img src="switches/wallpaper_smooth.jpg" width="320" alt="wallpaper_smooth on a TV: the same 640x360 animated wallpaper frame in 3 px blocks without the key and smooth with it, an eye cropped from two screenshots and zoomed"> |
+| `prayer_style` | <img src="switches/prayer_style.jpg" width="320" alt="prayer_style timeline on a TV: a thin 24-hour line under the date, Fajr, Dhuhr and Asr dimmed, the now tick, Maghrib glowing red with Maghrib 17:51 under it, Isha after it"> |
+| `prayer_glow_color` | <img src="switches/prayer_style.jpg" width="320" alt="prayer_glow_color on a TV: the default red glow on Maghrib, the next prayer on the timeline"> |
+| `theme_name` | <img src="switches/theme_name.jpg" width="320" alt="theme_name on a TV: the Theme picker in Launcher settings, a row of cards named Aurora (in use, focused) and Ruska with their wallpapers, and Reset to built-in"> |

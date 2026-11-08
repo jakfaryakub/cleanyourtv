@@ -32,7 +32,7 @@ it keeps and why. Replace `<tv ip>` with your TV's address.
 
 | Button | Keycode | Handled by |
 |---|---|---|
-| Gear | 83 (`KEYCODE_NOTIFICATION`) | `settings_key_keycodes` in `launcher/.../config.xml` |
+| Gear | 83 (`KEYCODE_NOTIFICATION`) | `settings_key_keycodes` in `launcher/app/src/main/res/values/config.xml` |
 | YouTube / Netflix / Prime Video | 4065 / 4062 / 4099 | theme `app_keys` |
 | TV | 4001 | theme `app_keys`, mapped to `com.tcl.tv` (it went to the disabled launcherx before) |
 | Vidio | 4157 | TCL firmware, no mapping needed |
@@ -79,7 +79,7 @@ Weather, Prayer Times (Jakarta, method 20: Kementerian Agama RI) and Sleep Timer
   tile and scrolls to the top. Back on the dock or the top bar still does nothing.
   - This is a local patch. A rebuild from an unpatched checkout drops it.
   - Upstream, it would have to be an off-by-default switch.
-- **`addons/prayer-times/.../config.xml`**: Jakarta coordinates and method 20.
+- **`addons/prayer-times/app/src/main/res/values/config.xml`**: Jakarta coordinates and method 20.
 
 ## After a firmware update
 
@@ -129,3 +129,18 @@ TV_HOST=<tv ip> tools/venv/bin/python -I tools/check.py examples/tcl-t6c-indones
   - This needs a launcher switch that is off by default. See `docs/workflows/launcher-switch.md` and
     `docs/modules.md`.
 - **Wallpaper**: replace the 736×414 test image with a higher-resolution one, of 1920×1080 or more.
+
+## Theme font
+
+The theme draws Home in [Plus Jakarta Sans](theme/fonts/plus-jakarta-sans.ttf) (`"font"` in
+[theme/config.json](theme/config.json)), a variable font by Tokotype that covers the four weights the launcher
+uses. [Manrope](theme/fonts/manrope.ttf) and [Inter](theme/fonts/inter.ttf) sit beside it to try instead. All
+three are SIL Open Font License 1.1 fonts, each with its licence next to it
+([plus-jakarta-sans.OFL.txt](theme/fonts/plus-jakarta-sans.OFL.txt), [manrope.OFL.txt](theme/fonts/manrope.OFL.txt),
+[inter.OFL.txt](theme/fonts/inter.OFL.txt)), taken from `google/fonts`. The files were renamed from the Google
+Fonts names (`PlusJakartaSans[wght].ttf` and so on), whose brackets `tools/theme.sh` does not push.
+
+## Performance baseline
+
+[docs/baseline/2026-11-07.md](../../docs/baseline/2026-11-07.md) has memory, CPU and frame numbers for
+Home on this TV with launcher 3.4, taken before the theme-customization work.

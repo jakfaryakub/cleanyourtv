@@ -48,10 +48,13 @@ import android.os.Looper;
 import android.os.SystemClock;
 import android.provider.Settings;
 import android.text.SpannableString;
+import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextPaint;
 import android.text.TextUtils;
 import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
+import android.text.style.TypefaceSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.KeyEvent;
@@ -80,6 +83,8 @@ import androidx.recyclerview.widget.RecyclerView;
 import java.io.File;
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Calendar;
@@ -159,6 +164,28 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private boolean ambientGlow;
     /** config.xml app_glow: the highlight takes the focused app's colour on every tile. */
     private boolean appGlow;
+    /** focus_frame: false keeps the glass hidden, so the focused tile is marked by its zoom (and opacity) alone. */
+    private boolean focusFrame = true;
+    /** prayer_times: the line of today's five times under the clock, null when the key is off or has no place. */
+    private TextView prayerLine;
+    private double prayerLat, prayerLon;
+    private int prayerIhtiyat;
+    private LocalDate prayerDay;
+    /** The prayer drawn in bold, or -1 before the line is first drawn. */
+    private int prayerNext = -1;
+    /** prayer_style timeline: the 24-hour line in place of prayerLine; null otherwise. */
+    private PrayerTimeline prayerTimeline;
+    /** Today's times for the timeline and the day they are for; recomputed when the date changes. */
+    private int[] timelineToday;
+    private LocalDate timelineDay;
+    /** Redraws the prayer line at the minute the next prayer comes, or at midnight. */
+    private final Runnable prayerTick = this::updatePrayerLine;
+    /** rows_autohide_seconds: when the app row fades out and how the first key brings it back; null when off. */
+    private RowsAutohide autohide;
+    private final Runnable autohideTick = this::checkAutohide;
+    /** wallpaper_pause_seconds: when the animated wallpaper pauses on its frame; null when off. */
+    private WallpaperPause wallpaperPause;
+    private final Runnable wallpaperPauseTick = this::checkWallpaperPause;
     /** config.xml glow_style: the shape setAmbient paints the glow mask in. */
     private String glowStyle;
     /** config.xml cinematic_white_focus: the cinematic shelf keeps the white highlight. */
@@ -445,6 +472,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (festive) updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
+            updatePrayerTimeline();
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -457,10 +485,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh). Read before the
+        // layout, so a theme font (config.json font) is in place when the views are inflated.
+        Config cfg = Config.load(this);
+        ThemeFontFactory.install(getWindow(), ThemeFont.load(this, cfg));
         setContentView(R.layout.activity_main);
         density = getResources().getDisplayMetrics().density;
-        // config.xml, overlaid by config.json from a pushed theme (see Config and tools/theme.sh).
-        Config cfg = Config.load(this);
         homeAppKeys = RemoteKeys.parseAppKeys(cfg.appKeys);
         clockFormat = cfg.clockFormat;
         ClockFormat.apply(getWindow().getDecorView(), clockFormat);
@@ -480,6 +510,8 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         reducedMotion = cfg.reducedMotion;
         dockRow = cfg.dockRow;
         singleRow = cfg.singleRow;
+        rowWrap = cfg.rowWrap;
+        downOpensLibrary = cfg.downOpensLibrary;
         focusOvershoot = cfg.focusOvershoot;
         festival = cfg.festival;
         festive = festival.active(LocalDate.now());
@@ -522,6 +554,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         ambientGlow = cfg.ambientGlow;
         glowSnap = cfg.glowSnap;
         appGlow = cfg.appGlow;
+        focusFrame = cfg.focusFrame;
         if (!ambientGlow) ambient.setVisibility(View.GONE);
         heroName = findViewById(R.id.heroName);
         hero = findViewById(R.id.hero);
@@ -604,6 +637,16 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             date.setTextSize(11f);
             lunarDate.setTextSize(11f);
             date.setPadding(0, (int) (4 * density), 0, 0);
+        }
+        if (cfg.clockSize > 0) applyClockSize(cfg.clockSize);
+        if (Config.HEADER_END.equals(cfg.headerPosition)) moveHeaderToEnd();
+        if (cfg.prayerTimes && !Double.isNaN(cfg.latitude) && !Double.isNaN(cfg.longitude)) {
+            setUpPrayerLine(cfg, Config.HEADER_END.equals(cfg.headerPosition));
+        }
+        if (cfg.headerShadow) shadowHeader();
+        if (cfg.rowsAutohideSeconds > 0) autohide = new RowsAutohide(cfg.rowsAutohideSeconds, SystemClock.uptimeMillis());
+        if (cfg.wallpaperPauseSeconds > 0 && cfg.wallpaperAnimated != null) {
+            wallpaperPause = new WallpaperPause(cfg.wallpaperPauseSeconds, SystemClock.uptimeMillis());
         }
         vpnApp = cfg.vpnApp;
         vpnPill = cfg.vpnPill && !cfg.topMenu;
@@ -883,6 +926,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             makeIconOnly((TextView) btnSettings);
         }
         if (cfg.iconOnlyInputs) makeIconOnly((TextView) btnInputs);
+        if (cfg.topButtonSize > 0) resizeIconButtons(cfg.topButtonSize);
         iconOnlyVpn = vpnPill && cfg.iconOnlyVpn;
         if (iconOnlyVpn) {
             vpnPlainBackground = btnVpn.getBackground().getConstantState();
@@ -929,11 +973,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
         if (festive) applyFestiveSkin((TextView) btnInputs, (TextView) btnSettings);
 
-        // Hide the glass when focus leaves the tiles.
-        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener((oldF, newF) -> {
-            boolean onTile = newF != null && newF.getId() == R.id.card;
-            if (!onTile) hideGlass();
-        });
+        // Hide the glass when focus leaves the tiles. Removed in onDestroy: recreate() keeps the window and its decor
+        // view, so a listener left behind kept every earlier Home alive (and ran its hideGlass) after a theme switch.
+        getWindow().getDecorView().getViewTreeObserver().addOnGlobalFocusChangeListener(glassFocusListener);
 
         packageFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
         packageFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
@@ -955,7 +997,10 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
         }
 
-        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        // From the application: a ConnectivityManager made from this activity keeps it as mContext, and the
+        // process-wide callback handler it creates is held by the system, so every recreate() (a theme switch,
+        // any Launcher settings change) left the old Home in memory, views and wallpaper included.
+        ConnectivityManager cm = getApplicationContext().getSystemService(ConnectivityManager.class);
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.registerCallback(inputCallback, handler);
         if (cm != null) {
@@ -1055,6 +1100,14 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (openLibraryIfAsked(intent)) return;
         if (openInputsIfAsked(intent)) return;
         if (intent == null || !intent.hasCategory(Intent.CATEGORY_HOME)) return;
+        playWallpaperAgain();   // Home pressed on Home: as a key, without taking the press from what follows
+        if (autohide != null && autohide.hidden()) {
+            // Home on a hidden row only brings it back, as any first key does.
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(true);
+            scheduleAutohide();
+            return;
+        }
         if (gameDay != null && !stopped) gameDay.read();
         grid.scrollToPosition(0);
         lastFocused = 0;
@@ -1136,8 +1189,17 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         if (showStats) startStats();
         if (gameDay != null) gameDay.start();
         sky.update();
+        if (wallpaperPause != null) wallpaperPause.show(SystemClock.uptimeMillis());
+        wallpaperPlayer.setPaused(false);
         wallpaperPlayer.start();
+        scheduleWallpaperPause();
         handler.postDelayed(minuteTick, MINUTE_MS);
+        updatePrayerLine();
+        if (autohide != null) {
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(false);
+            scheduleAutohide();
+        }
         if (festive && lamp != null) {
             lamp.start();
             LocalDate today = LocalDate.now();
@@ -1311,11 +1373,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         root.removeCallbacks(showIdleClock);
         endReorder();   // Home or another app while reordering keeps the order so far
         wallpaperPlayer.stop();
+        handler.removeCallbacks(wallpaperPauseTick);
         stopAmbientAnimation();
         hero.animate().cancel();
         ambient.animate().cancel();
         heroArt.animate().cancel();
         handler.removeCallbacks(minuteTick);
+        handler.removeCallbacks(prayerTick);
+        if (autohide != null) {
+            handler.removeCallbacks(autohideTick);
+            autohide.show(SystemClock.uptimeMillis());
+            showRows(false);   // an app or the screensaver comes up: Home is whole when it comes back
+        }
         handler.removeCallbacks(openWhenOnline);
         startPending = null;   // leaving Home before the network came back: the boot's app stays closed
         stopStats();
@@ -1358,6 +1427,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         grid.getRecycledViewPool().clear();
         heroArtCache.clear();
         heroArtKey = null;
+        ThemeIcons.clear();
         wallpaperPlayer.releaseForMemoryPressure();
         tileRefresh.invalidate();
     }
@@ -1374,16 +1444,22 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         }
     }
 
+    private final ViewTreeObserver.OnGlobalFocusChangeListener glassFocusListener = (oldF, newF) -> {
+        boolean onTile = newF != null && newF.getId() == R.id.card;
+        if (!onTile) hideGlass();
+    };
+
     @Override
     protected void onDestroy() {
         super.onDestroy();
+        getWindow().getDecorView().getViewTreeObserver().removeOnGlobalFocusChangeListener(glassFocusListener);
         RemoteKeys.release(this);
         cancelHoldOk();
         if (gameDay != null) gameDay.shutdown();
         unregisterReceiver(packageReceiver);
         if (openOnStartOnWake) unregisterReceiver(wakeReceiver);
         wallpaperPlayer.close();
-        ConnectivityManager cm = getSystemService(ConnectivityManager.class);
+        ConnectivityManager cm = getApplicationContext().getSystemService(ConnectivityManager.class);   // as in onCreate
         TvInputManager tim = (TvInputManager) getSystemService(TV_INPUT_SERVICE);
         if (tim != null) tim.unregisterCallback(inputCallback);
         if (cm != null) {
@@ -1424,6 +1500,18 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        // Before autohide, which may take the key: a paused wallpaper plays again on any key, and the key goes on.
+        if (event.getAction() == KeyEvent.ACTION_DOWN) playWallpaperAgain();
+        if (autohide != null) {
+            int took = autohide.onKey(event.getKeyCode(), event.getAction() == KeyEvent.ACTION_DOWN,
+                    SystemClock.uptimeMillis());
+            if (took == RowsAutohide.REVEAL) {
+                showRows(true);
+                return true;
+            }
+            if (took == RowsAutohide.SWALLOW) return true;
+            if (!autohide.hidden()) scheduleAutohide();
+        }
         if (homeIgnoreChannelKeys && RemoteKeys.isChannelKey(event.getKeyCode())) return true;
         // Vendor keys (TCL Netflix button, 4062) never reach the key services, only the focused window, so their
         // "hold:" entries run here too or nowhere. Only while resumed: onPause releases Home's holds, and a DOWN
@@ -1520,6 +1608,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         orderAtStart = adapter.movableKeys();
         glass.setAccent(REORDER_ACCENT);
         btnReorder.setActivated(true);
+        if (!focusFrame) {
+            // The glass is hidden with focus_frame false: bring it up on the focused tile for the move.
+            View f = getCurrentFocus();
+            if (f != null && f.getId() == R.id.card) onTileFocused(lastFocused, f);
+        }
         return true;
     }
 
@@ -1665,6 +1758,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         adapter.setReordering(false);
         glass.setAccent(festive ? festival.accentColor() : 0);
         btnReorder.setActivated(false);
+        if (!focusFrame) hideGlass();
         List<String> keys = adapter.movableKeys();
         List<String> before = orderAtStart;
         orderAtStart = null;
@@ -1782,12 +1876,19 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         libraryFocusPending = false;
         libraryFromTopBar = false;
         libraryFromVpnPill = false;
+        libraryFromTile = -1;
         appLibrary = new AppLibraryDialog(this, animations, reducedMotion, appLibrarySelection, libraryOkOpens, adapter::containsPackage, () -> reloadApps(false), () -> {
             appLibrary = null;
             openPopup = null;
             if (libraryFromTopBar) {
                 libraryFromTopBar = false;
                 btnLibraryTop.requestFocus();
+                return;
+            }
+            if (libraryFromTile >= 0) {
+                int tile = libraryFromTile;
+                libraryFromTile = -1;
+                grid.post(() -> { if (appLibrary == null && !isFinishing()) focusTile(tile); });
                 return;
             }
             boolean fromVpnPill = libraryFromVpnPill;
@@ -1832,42 +1933,45 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         boolean lifted = advancedEffects && !DockSlots.inDockRow(dockRow, singleRow, position, COLUMNS);
         float y = r.exactCenterY() - h / 2f - (lifted ? 4f * density : 0f);
 
-        ViewGroup.LayoutParams lp = glass.getLayoutParams();
-        if (lp.width != (int) w || lp.height != (int) h || card.getWidth() != glassCardW) {
-            lp.width = (int) w;
-            lp.height = (int) h;
-            glass.setLayoutParams(lp);
-            // GlassView draws its slab inset by pad, i.e. exactly over the zoomed tile: same corners as the tile.
-            glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * scale);
-        }
-        glassCardW = card.getWidth();
-        glassCardRect.set(r);
-        glassTargetX = x;
-        glassTargetY = y;
-        // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid (and on the dock with
-        // cinematic_white_focus). app_glow: every tile. In a single row every tile is the dock's kind.
-        boolean coloured = (appGlow || cinematic && !cinematicWhiteFocus && (singleRow || position < COLUMNS)) && !festive;
-        int accent = coloured ? adapter.ambientColorAt(position) : 0;
-        if ((cinematic || appGlow) && !festive && accent != glassAccent) {
-            glassAccent = accent;
-            glass.setAccent(accent);
-        }
-        if (!glassShown) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-            if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
-            else glass.setAlpha(1f);
-            glassShown = true;
-        } else if (!animations) {
-            springX.cancel();
-            springY.cancel();
-            glass.setTranslationX(x);
-            glass.setTranslationY(y);
-        } else {
-            springX.animateToFinalPosition(x - glassScrollShiftX);
-            springY.animateToFinalPosition(y - glassScrollShift);
+        // focus_frame false: no glass, except while reordering, where its blue says which tile moves.
+        if (focusFrame || reordering) {
+            ViewGroup.LayoutParams lp = glass.getLayoutParams();
+            if (lp.width != (int) w || lp.height != (int) h || card.getWidth() != glassCardW) {
+                lp.width = (int) w;
+                lp.height = (int) h;
+                glass.setLayoutParams(lp);
+                // GlassView draws its slab inset by pad, i.e. exactly over the zoomed tile: same corners as the tile.
+                glass.setRadius(AppAdapter.cornerRadius(card.getWidth(), density) * scale);
+            }
+            glassCardW = card.getWidth();
+            glassCardRect.set(r);
+            glassTargetX = x;
+            glassTargetY = y;
+            // Cinematic shelf: the highlight glows in the dock app's colour, plain white in the grid (and on the dock with
+            // cinematic_white_focus). app_glow: every tile. In a single row every tile is the dock's kind.
+            boolean coloured = (appGlow || cinematic && !cinematicWhiteFocus && (singleRow || position < COLUMNS)) && !festive;
+            int accent = coloured ? adapter.ambientColorAt(position) : 0;
+            if ((cinematic || appGlow) && !festive && accent != glassAccent) {
+                glassAccent = accent;
+                glass.setAccent(accent);
+            }
+            if (!glassShown) {
+                springX.cancel();
+                springY.cancel();
+                glass.setTranslationX(x);
+                glass.setTranslationY(y);
+                if (animations && !reducedMotion) glass.animate().alpha(1f).setDuration(180).start();
+                else glass.setAlpha(1f);
+                glassShown = true;
+            } else if (!animations) {
+                springX.cancel();
+                springY.cancel();
+                glass.setTranslationX(x);
+                glass.setTranslationY(y);
+            } else {
+                springX.animateToFinalPosition(x - glassScrollShiftX);
+                springY.animateToFinalPosition(y - glassScrollShift);
+            }
         }
         View item = (View) card.getParent();
         if (dockRow && (singleRow || position < COLUMNS)) {
@@ -1896,6 +2000,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     /** Refits the glass to the focused holder once the grid layout and tile dimensions settle. */
     private void refitGlass() {
         if (isDestroyed() || adapter.appCount() == 0 || libraryFocusPending) return;
+        if (!focusFrame && !reordering) return;   // no glass to fit
         int pos = Math.max(0, Math.min(lastFocused, adapter.appCount() - 1));
         RecyclerView.ViewHolder vh = grid.findViewHolderForAdapterPosition(pos);
         View card = vh == null ? null : vh.itemView.findViewById(R.id.card);
@@ -2438,18 +2543,27 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     public boolean onTileVerticalKey(int position, int keyCode) {
         int count = adapter.appCount();
         int target;
+        if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN && count > 0) {
+            switch (GridNavigation.down(position, count, COLUMNS, singleRow, adapter.isLibraryAt(count), downOpensLibrary)) {
+                case GridNavigation.DOWN_PILL: focusLibrary(); return true;
+                case GridNavigation.DOWN_LIBRARY: openLibraryFromTile(position); return true;
+                case GridNavigation.DOWN_STAY: return true;
+                default: break;   // a grid row with one below it: moved further down
+            }
+        }
         if (singleRow) {
-            // One row: Up leaves for the top bar, Down has nowhere to go, and Left/Right walk the whole row,
-            // stopping at its two ends (the default focus search scrolls the row to the next tile).
+            // One row: Up leaves for the top bar, and Left/Right walk the whole row, stopping at its two ends
+            // (the default focus search scrolls the row to the next tile), or wrapping round with row_wrap.
             if (keyCode == KeyEvent.KEYCODE_DPAD_UP) return false;
-            if (keyCode == KeyEvent.KEYCODE_DPAD_DOWN) return true;
             boolean forward = rtlAppGrid ? keyCode == KeyEvent.KEYCODE_DPAD_LEFT : keyCode == KeyEvent.KEYCODE_DPAD_RIGHT;
             int last = adapter.focusablePosition(count - 1);
-            if (forward && position >= last) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
+            if (forward && position >= last && adapter.isLibraryAt(count)) {
+                focusLibrary();
                 return true;
             }
-            return !forward && position == 0;
+            if (rowWrap && wrapTo(GridNavigation.wrapTarget(Math.min(position, last), 0, last, rtlAppGrid,
+                    keyCode == KeyEvent.KEYCODE_DPAD_LEFT), keyCode)) return true;
+            return forward ? position >= last : position == 0;
         }
         // Horizontal: swallow the key at a row's ends so focus never wraps to the next row or
         // escapes up into the top bar. Mid-row moves fall through to the default focus search.
@@ -2461,6 +2575,12 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             }
             // In the dock, the last app is the row's end: the empty slots after it take no focus.
             int rowCount = position < COLUMNS ? Math.min(count, adapter.dockFilled()) : count;
+            if (rowWrap) {
+                int rowStart = (position / COLUMNS) * COLUMNS;
+                int rowEnd = Math.min(rowStart + COLUMNS, rowCount) - 1;
+                if (wrapTo(GridNavigation.wrapTarget(position, rowStart, rowEnd, rtlAppGrid,
+                        keyCode == KeyEvent.KEYCODE_DPAD_LEFT), keyCode)) return true;
+            }
             return GridNavigation.atHorizontalEdge(position, rowCount, COLUMNS,
                     rtlAppGrid, keyCode == KeyEvent.KEYCODE_DPAD_LEFT);
         }
@@ -2468,18 +2588,29 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (position < COLUMNS) return false;          // dock row: let focus move to the top bar
             target = position - COLUMNS;
         } else {
-            int lastRowStart = ((count - 1) / COLUMNS) * COLUMNS;
-            if (position >= lastRowStart) {
-                if (adapter.isLibraryAt(count)) focusLibrary();
-                return true;
-            }
-            target = Math.min(position + COLUMNS, count - 1);
+            target = Math.min(position + COLUMNS, count - 1);   // the last row's Down was handled above
         }
         focusTile(target);
         // The default focus search clicks for Left/Right; Up/Down are handled here, so click for them too.
         grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_UP
                 ? SoundEffectConstants.NAVIGATION_UP : SoundEffectConstants.NAVIGATION_DOWN);
         return true;
+    }
+
+    /** row_wrap: focus the row's other end, with the scroll focusTile already animates; false for no wrap. */
+    private boolean wrapTo(int target, int keyCode) {
+        if (target < 0) return false;
+        focusTile(target);
+        grid.playSoundEffect(keyCode == KeyEvent.KEYCODE_DPAD_LEFT
+                ? SoundEffectConstants.NAVIGATION_LEFT : SoundEffectConstants.NAVIGATION_RIGHT);
+        return true;
+    }
+
+    /** down_opens_library: open the App library from a tile; closing it comes back to that tile. */
+    private void openLibraryFromTile(int position) {
+        onLibraryRequested();
+        libraryFromTile = position;
+        grid.playSoundEffect(SoundEffectConstants.NAVIGATION_DOWN);
     }
 
     @Override public void onLibraryFocused() {
@@ -2519,6 +2650,251 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             textLp.gravity = ((TextView) text).getGravity() & Gravity.HORIZONTAL_GRAVITY_MASK;
             text.setLayoutParams(textLp);
         }
+    }
+
+    /**
+     * clock_size: the clock at this many sp, the AM/PM mark and the divider at the same ratio, and the date smaller
+     * with a smaller clock but never larger: a big clock over a small date is the look a larger size is for.
+     */
+    private void applyClockSize(int sp) {
+        float ratio = sp / 52f;
+        ((TextView) findViewById(R.id.clock)).setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
+        TextView date = findViewById(R.id.date);
+        float dateRatio = Math.min(1f, ratio);
+        date.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(10f, date.getTextSize() / getResources().getDisplayMetrics().scaledDensity * dateRatio));
+        TextView ampm = findViewById(R.id.ampm);
+        ampm.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(9f, 15f * ratio));
+        View divider = findViewById(R.id.clockDivider);
+        ViewGroup.LayoutParams lp = divider.getLayoutParams();
+        lp.height = Math.round(26 * density * ratio);
+        divider.setLayoutParams(lp);
+    }
+
+    /**
+     * header_position end: the clock's row at the right, beside the buttons, with the date to the clock's left, as
+     * the Hebrew menu bar puts it. The buttons stay on the right edge, level with the clock.
+     */
+    private void moveHeaderToEnd() {
+        TextView date = findViewById(R.id.date);
+        LinearLayout dateColumn = (LinearLayout) date.getParent();
+        View divider = findViewById(R.id.clockDivider);
+        LinearLayout clockRow = (LinearLayout) findViewById(R.id.clock).getParent();
+        if (dateColumn.getParent() != clockRow) {
+            // date_below_clock moved the date under the clock: keep it there, flush right under the clock.
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dateColumn.getLayoutParams();
+            lp.gravity = Gravity.RIGHT;
+            dateColumn.setLayoutParams(lp);
+        } else {
+            // Date | clock: the date column first, its own width, then the divider, the clock and AM/PM.
+            clockRow.removeView(dateColumn);
+            clockRow.removeView(divider);
+            LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) dateColumn.getLayoutParams();
+            lp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            lp.weight = 0;
+            clockRow.addView(dateColumn, 0, lp);
+            clockRow.addView(divider, 1);
+        }
+        clockRow.setGravity(Gravity.RIGHT | Gravity.BOTTOM);
+        // The column wraps its lines now, so they must wrap too: a match_parent TextView does not ask for a new layout
+        // when its text gets longer. After a cold boot the date first reads the day the TV wakes with and, once the
+        // clock syncs, a longer one ("SATURDAY 7 NOVEMBER"), which then lost both ends (moveDateBelowClock, the same).
+        for (int i = 0; i < dateColumn.getChildCount(); i++) {
+            View line = dateColumn.getChildAt(i);
+            if (!(line instanceof TextView)) continue;
+            ((TextView) line).setGravity(Gravity.RIGHT);
+            LinearLayout.LayoutParams lineLp = (LinearLayout.LayoutParams) line.getLayoutParams();
+            lineLp.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            lineLp.gravity = Gravity.RIGHT;
+            line.setLayoutParams(lineLp);
+        }
+        TextView greeting = findViewById(R.id.greeting);
+        greeting.setGravity(Gravity.RIGHT);
+    }
+
+    /** prayer_times: one line under the header, outside leftBlock so the buttons stay level with the clock. */
+    private void setUpPrayerLine(Config cfg, boolean end) {
+        prayerLat = cfg.latitude;
+        prayerLon = cfg.longitude;
+        prayerIhtiyat = cfg.prayerIhtiyat;
+        TextView date = findViewById(R.id.date);
+        float dateSp = date.getTextSize() / getResources().getDisplayMetrics().scaledDensity;
+        float textSp = Math.max(15f, dateSp);
+        View stats = findViewById(R.id.stats);
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.addRule(RelativeLayout.BELOW, showStats ? R.id.stats : R.id.leftBlock);
+        if (end) lp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        else lp.addRule(RelativeLayout.ALIGN_START, R.id.leftBlock);
+        if (Config.PRAYER_TIMELINE.equals(cfg.prayerStyle)) {
+            ThemeFont font = ThemeFont.current();
+            android.graphics.Typeface bold = font != null ? font.get(700) : null;
+            if (bold == null) {
+                bold = android.graphics.Typeface.create(UiFont.get(this, R.string.font_regular),
+                        android.graphics.Typeface.BOLD);
+            }
+            PrayerTimeline timeline = new PrayerTimeline(this,
+                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSp, getResources().getDisplayMetrics()),
+                    bold, cfg.prayerGlowColor);
+            timeline.setId(View.generateViewId());
+            lp.topMargin = Math.round(4 * density);
+            ((ViewGroup) stats.getParent()).addView(timeline, lp);
+            prayerTimeline = timeline;
+            return;
+        }
+        TextView line = new TextView(this);
+        line.setId(View.generateViewId());
+        line.setSingleLine(true);
+        line.setFocusable(false);
+        line.setIncludeFontPadding(false);
+        line.setTextColor(0xB3FFFFFF);
+        // At least the date's size, so the line reads from the sofa as well as the date does.
+        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp);
+        line.setLetterSpacing(0.02f);
+        line.setTypeface(UiFont.get(this, R.string.font_regular));
+        lp.topMargin = Math.round(10 * density);
+        ((ViewGroup) stats.getParent()).addView(line, lp);
+        prayerLine = line;
+    }
+
+    /**
+     * header_shadow: a soft dark shadow under the clock, the date and the prayer line, so they read over a light
+     * wallpaper. Text shadows are drawn with the glyphs, and these lines change once a minute at most.
+     */
+    private void shadowHeader() {
+        float radius = 6 * density, dy = 1.5f * density;
+        int colour = 0x99000000;
+        int[] ids = {R.id.clock, R.id.ampm, R.id.date, R.id.greeting, R.id.shamsiDate, R.id.lunarDate};
+        for (int id : ids) ((TextView) findViewById(id)).setShadowLayer(radius, 0, dy, colour);
+        if (prayerLine != null) prayerLine.setShadowLayer(radius, 0, dy, colour);
+        if (prayerTimeline != null) prayerTimeline.setShadow(true);
+    }
+
+    /** A key, or Home pressed: the wait starts over, and a paused wallpaper plays again. */
+    private void playWallpaperAgain() {
+        if (wallpaperPause == null) return;
+        if (wallpaperPause.onKey(SystemClock.uptimeMillis())) wallpaperPlayer.setPaused(false);
+        scheduleWallpaperPause();
+    }
+
+    private void scheduleWallpaperPause() {
+        if (wallpaperPause == null) return;
+        handler.removeCallbacks(wallpaperPauseTick);
+        if (started) handler.postDelayed(wallpaperPauseTick, wallpaperPause.delayMs(SystemClock.uptimeMillis()));
+    }
+
+    /** wallpaper_pause_seconds: holds the animation on its frame once Home has had no key for the wait. */
+    private void checkWallpaperPause() {
+        if (wallpaperPause == null || !started) return;
+        if (wallpaperPause.pauseNow(SystemClock.uptimeMillis())) {
+            wallpaperPlayer.setPaused(true);
+            android.util.Log.i("TvHome.Wallpaper", "animation paused: no key for wallpaper_pause_seconds");
+        } else {
+            scheduleWallpaperPause();
+        }
+    }
+
+    private void scheduleAutohide() {
+        handler.removeCallbacks(autohideTick);
+        if (resumed) handler.postDelayed(autohideTick, autohide.delayMs(SystemClock.uptimeMillis()));
+    }
+
+    /** Hides the row once the wait is over, unless tiles are being moved or a menu or dialog has the remote. */
+    private void checkAutohide() {
+        if (autohide == null || !resumed) return;
+        boolean blocked = reordering || !hasWindowFocus() || openPopup != null || cardPrompt != null
+                || appLibrary != null;
+        if (autohide.hideNow(SystemClock.uptimeMillis(), blocked)) hideRows();
+        else scheduleAutohide();
+    }
+
+    /** The app row (and its focus glass) fades out; the header and the wallpaper stay. Focus stays where it is. */
+    private void hideRows() {
+        if (!animations || reducedMotion) {
+            grid.animate().cancel();
+            grid.setAlpha(0f);
+            if (glassShown) glass.setAlpha(0f);
+            return;
+        }
+        grid.animate().alpha(0f).setDuration(600).start();
+        if (glassShown) glass.animate().alpha(0f).setDuration(600).start();
+    }
+
+    /** The row back, on the tile the focus was on; animated only for a key, and only with animations on. */
+    private void showRows(boolean animate) {
+        if (grid.getAlpha() == 1f) return;
+        if (!animate || !animations || reducedMotion) {
+            grid.animate().cancel();
+            grid.setAlpha(1f);
+            if (glassShown) glass.setAlpha(1f);
+        } else {
+            grid.animate().alpha(1f).setDuration(220).start();
+            if (glassShown) glass.animate().alpha(1f).setDuration(220).start();
+        }
+        if (!grid.hasFocus()) focusTile(lastFocused);
+    }
+
+    /** Draws today's times with the next one bold and white, and wakes again when that changes. */
+    private void updatePrayerLine() {
+        if (prayerLine == null && prayerTimeline == null) return;
+        handler.removeCallbacks(prayerTick);
+        LocalTime now = LocalTime.now();
+        LocalDate today = LocalDate.now();
+        int minute = now.getHour() * 60 + now.getMinute();
+        Prayer.Line line = Prayer.line(today, minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
+        if (line.next != prayerNext || !line.day.equals(prayerDay)) {
+            prayerNext = line.next;
+            prayerDay = line.day;
+            CharSequence text = prayerText(line);
+            if (prayerLine != null) prayerLine.setText(text);
+            else prayerTimeline.setContentDescription(text.toString());
+        }
+        if (prayerTimeline != null) showTimeline(today, line, minute);
+        long delay = ((line.changesAt() - minute) * 60L - now.getSecond()) * 1000L + 500;
+        handler.postDelayed(prayerTick, Math.max(1000L, delay));
+    }
+
+    /** prayer_style timeline, from minuteTick: moves the now tick; the prayers' own changes come from prayerTick. */
+    private void updatePrayerTimeline() {
+        if (prayerTimeline == null) return;
+        LocalTime now = LocalTime.now();
+        LocalDate today = LocalDate.now();
+        int minute = now.getHour() * 60 + now.getMinute();
+        showTimeline(today, Prayer.line(today, minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat),
+                minute);
+    }
+
+    private void showTimeline(LocalDate today, Prayer.Line line, int minute) {
+        if (!today.equals(timelineDay)) {
+            timelineToday = Prayer.times(today, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
+            timelineDay = today;
+        }
+        prayerTimeline.show(PrayerTimelineModel.of(timelineToday, line, minute));
+    }
+
+    private CharSequence prayerText(Prayer.Line line) {
+        int[] times = line.times;
+        int next = line.next;
+        String[] names = getResources().getStringArray(R.array.prayer_names);
+        SpannableStringBuilder text = new SpannableStringBuilder();
+        for (int i = 0; i < Prayer.COUNT; i++) {
+            if (times[i] == Prayer.NONE) continue;
+            if (text.length() > 0) text.append("\u2003\u2003");
+            int start = text.length();
+            text.append(names[i]).append(' ').append(String.format(Locale.ROOT, "%02d:%02d", times[i] / 60, times[i] % 60));
+            if (i == next) {
+                text.setSpan(new ForegroundColorSpan(Color.WHITE), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+                text.setSpan(boldSpan(), start, text.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            }
+        }
+        return text;
+    }
+
+    /** The theme font at weight 700 where it has one (a variable font), else the platform's bold. */
+    private Object boldSpan() {
+        ThemeFont font = ThemeFont.current();
+        android.graphics.Typeface bold = font != null ? font.get(700) : null;
+        if (bold != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) return new TypefaceSpan(bold);
+        return new StyleSpan(android.graphics.Typeface.BOLD);
     }
 
     /** Centre the one-row header when the greeting and extra date lines are absent (#2265). */
@@ -2620,6 +2996,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     @Override public void onLibraryUp() {
         if (adapter.appCount() == 0) { firstTopButton().requestFocus(); return; }
+        if (singleRow) { focusTile(adapter.appCount() - 1); return; }   // the pill sits after the row's last tile
         int lastRow = ((adapter.appCount() - 1) / COLUMNS) * COLUMNS;
         focusTile(Math.min(lastRow + lastFocused % COLUMNS, adapter.appCount() - 1));
     }
@@ -2940,7 +3317,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int flame = 0;
         boolean steady = false;
         try {
-            ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+            ConnectivityManager cm = (ConnectivityManager) getApplicationContext().getSystemService(Context.CONNECTIVITY_SERVICE);
             boolean wifi = false, ethernet = false;
             // All networks, not just the active one: with a VPN up the active network is the VPN itself.
             for (Network net : cm != null ? cm.getAllNetworks() : new Network[0]) {
@@ -3019,7 +3396,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         } else {
             if (icon != wifiIcon) {
                 wifiIcon = icon;
-                btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(icon, 0, 0, 0);
+                setNetworkIcon(icon);
             }
             ColorStateList tint = online ? wifiOnlineTint : wifiPlainTint;
             // wifi_status_warnings: orange while connected but not validated (a captive portal), red while offline.
@@ -3047,8 +3424,58 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private View btnLibraryTop;
     /** The open library came from that button: closing it returns there instead of scrolling to the grid's end. */
     private boolean libraryFromTopBar;
+    /** down_opens_library: the tile the App library was opened from, focused again when it closes; -1 for none. */
+    private int libraryFromTile = -1;
+    /** config.json row_wrap and down_opens_library. */
+    private boolean rowWrap, downOpensLibrary;
     /** The open library came from the VPN pill (vpn_pill, no VPN app): closing it returns there while the pill still shows. */
     private boolean libraryFromVpnPill;
+
+    /**
+     * top_button_size: every round icon-only top button (42dp, a 22dp icon) at this many dp, its icon scaled with it.
+     * Pills that keep a label are left alone.
+     */
+    private void resizeIconButtons(int dp) {
+        LinearLayout buttons = findViewById(R.id.topButtons);
+        float ratio = dp / 42f;
+        int size = Math.round(dp * density);
+        iconButtonIconPx = Math.round(22 * density * ratio);
+        for (int i = 0; i < buttons.getChildCount(); i++) {
+            if (!(buttons.getChildAt(i) instanceof TextView)) continue;
+            TextView b = (TextView) buttons.getChildAt(i);
+            if (b.getText() != null && b.getText().length() > 0) continue;   // a labelled pill
+            ViewGroup.LayoutParams lp = b.getLayoutParams();
+            lp.width = size;
+            lp.height = size;
+            b.setLayoutParams(lp);
+            int pad = Math.round(10 * density * ratio);
+            b.setPaddingRelative(pad, 0, pad, 0);
+            android.graphics.drawable.Drawable[] d = b.getCompoundDrawablesRelative();
+            int icon = Math.round(22 * density * ratio);
+            if (d[0] != null) {
+                d[0].setBounds(0, 0, icon, icon);
+                b.setCompoundDrawablesRelative(d[0], d[1], d[2], d[3]);
+            }
+        }
+    }
+
+    /** top_button_size: the icon size the round buttons were drawn at, or 0 for the drawables' own 22dp. */
+    private int iconButtonIconPx;
+
+    /**
+     * The network button's icon (Wi-Fi or Ethernet). With top_button_size the round button keeps its smaller icon:
+     * the intrinsic 22dp, set again on every network change, overflowed the button's padding and drew the glyph
+     * 4 px right of centre at 34dp.
+     */
+    private void setNetworkIcon(int res) {
+        if (iconButtonIconPx <= 0 || !wifiIconOnly) {
+            btnWifi.setCompoundDrawablesRelativeWithIntrinsicBounds(res, 0, 0, 0);
+            return;
+        }
+        Drawable d = getDrawable(res);
+        if (d != null) d.setBounds(0, 0, iconButtonIconPx, iconButtonIconPx);
+        btnWifi.setCompoundDrawablesRelative(d, null, null, null);
+    }
 
     /** Turns a labelled top pill into the round TopButtonIcon shape: no text, the icon centred by even padding. */
     private void makeIconOnly(TextView pill) {

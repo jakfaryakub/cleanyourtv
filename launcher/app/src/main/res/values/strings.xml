@@ -55,6 +55,19 @@
     <string name="dock_opacity_label">Dock band opacity</string>
     <string name="wallpaper_label">Wallpaper</string>
     <string name="wallpaper_state">Wallpaper: %1$s</string>
+    <!-- The Theme picker (docs/PLAN.md, Phase 3): English only in this fork for now. -->
+    <string name="theme_label" translatable="false">Theme</string>
+    <string name="theme_state" translatable="false">Theme: %1$s</string>
+    <string name="theme_in_use" translatable="false">In use</string>
+    <string name="theme_animated" translatable="false">Animated · %1$s</string>
+    <string name="theme_static" translatable="false">Static · %1$s</string>
+    <string name="theme_legacy" translatable="false">Legacy</string>
+    <string name="theme_builtin" translatable="false">Reset to built-in</string>
+    <string name="theme_builtin_name" translatable="false">Built-in</string>
+    <string name="theme_builtin_detail" translatable="false">The launcher\'s own look</string>
+    <string name="theme_broken" translatable="false">Can\'t read this theme</string>
+    <string name="theme_hint" translatable="false">Left and Right to choose, OK to apply, Back to cancel</string>
+    <string name="theme_failed" translatable="false">Couldn\'t switch the theme</string>
     <string name="wallpaper_none">None</string>
     <string name="wallpaper_applied">Wallpaper changed</string>
     <string name="wallpaper_theme_default">Theme default</string>
@@ -158,4 +171,12 @@
     <string name="clock_format_system">System</string>
     <string name="clock_format_12">12-hour</string>
     <string name="clock_format_24">24-hour</string>
+    <!-- prayer_times: the five daily prayers, in Prayer's order (Kemenag's Subuh, Dzuhur, Ashar, Maghrib, Isya). -->
+    <string-array name="prayer_names" translatable="false">
+        <item>Fajr</item>
+        <item>Dhuhr</item>
+        <item>Asr</item>
+        <item>Maghrib</item>
+        <item>Isha</item>
+    </string-array>
 </resources>

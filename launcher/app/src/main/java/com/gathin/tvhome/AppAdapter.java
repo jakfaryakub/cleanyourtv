@@ -34,6 +34,7 @@ import android.widget.Toast;
 import androidx.annotation.NonNull;
 import androidx.recyclerview.widget.RecyclerView;
 
+import java.io.File;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -80,6 +81,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         int ambient;
         /** uniform_tiles card fill, top and bottom colour; null until sampled from the icon. */
         int[] backdrop;
+        /** app_logos: the theme's icons/<package>.png, drawn instead of the banner or icon when it decodes. */
+        File logo;
 
         Entry(String label, ComponentName component, Drawable banner, Drawable icon) {
             this(APP, label, component, banner, icon, null, 0);
@@ -186,6 +189,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final boolean dockRow;
     /** config single_row: tiles sit in one sideways row, each as wide as a grid column would be. */
     private final boolean singleRow;
+    /** config.xml rtl_app_grid: the row starts on the right, so the key back to it from the pill is Right. */
+    private final boolean rtlGrid;
     /** config always_show_names: the alpha of an unfocused tile's name (0 hides it). */
     private final float restNameAlpha;
     /** cinematic_home: only then does a launch record the last-opened app the shelf uses. */
@@ -218,6 +223,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
     private final Map<String, String> appLabels, appBanners;
     /** Every app tile is its icon on a card tinted from that icon, never its banner (config.xml, uniform_tiles). */
     private final boolean uniformTiles;
+    /** app_logos: each app's logo from the theme's icons/ folder, where the theme has one. */
+    private final boolean appLogos;
+    /** tile_style "logo": app tiles have no card; each shows its logo, or its name as a white wordmark. */
+    private final boolean logoTiles;
+    /** focus_scale from the theme, or 0 for the built-in zoom. */
+    private final float themeScale;
+    /** unfocused_opacity: with tile_style logo, the opacity of a tile's logo, wordmark or card art while not focused. */
+    private final float restOpacity;
     /** Packages drawn from their icon and name even when they have a banner (config.xml icon_tiles). */
     private final Set<String> iconTiles;
     private final List<Entry> items = new ArrayList<>();
@@ -233,13 +246,18 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         this.animations = cfg.animations;
         this.advancedEffects = cfg.animations && cfg.advancedEffects;
         this.showHomeSettings = cfg.showHomeSettingsShortcut;
-        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill);
+        this.showLibrary = LibraryApps.showPill(cfg.appLibrary, cfg.libraryButton, cfg.showLibraryPill, cfg.downOpensLibrary);
         this.reducedMotion = cfg.reducedMotion;
         this.focusOvershoot = cfg.focusOvershoot;
         this.rowsBelowDock = cfg.rowsBelowDock;
         this.dockTitle = cfg.dockTitle;
         this.dockRow = cfg.dockRow;
         this.singleRow = cfg.singleRow;
+        this.rtlGrid = ctx.getResources().getBoolean(R.bool.rtl_app_grid);
+        this.appLogos = cfg.appLogos;
+        this.logoTiles = Config.TILE_LOGO.equals(cfg.tileStyle);
+        this.themeScale = cfg.focusScale;
+        this.restOpacity = cfg.unfocusedOpacity;
         this.restNameAlpha = cfg.alwaysShowNames ? 0.75f : 0f;
         this.cinematic = cfg.cinematicHome;
         this.launchActions = cfg.launchActions;
@@ -283,6 +301,7 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         // Some system apps declare two leanback entry points under one name (Sony's Timers & Clock on the
         // BRAVIA VU31), which would show as two identical tiles: keep the first per package and label.
         Set<String> seen = new HashSet<>();
+        File logoDir = appLogos ? Config.dir(ctx) : null;
         for (ResolveInfo ri : found) {
             if (ri.activityInfo == null) continue;
             String pkg = ri.activityInfo.packageName;
@@ -305,11 +324,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             // The icon is only drawn (and sampled for the glow) when there is no banner, so a tile with a
             // banner skips loading and decoding it.
             Drawable icon = banner == null ? ri.loadIcon(pm) : null;
-            if (card != null) {
-                fresh.add(new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent));
-            } else {
-                fresh.add(new Entry(label, component, banner, icon));
-            }
+            Entry entry = card != null ? new Entry(Entry.CARD, label, component, banner, icon, card.caption, card.accent)
+                    : new Entry(label, component, banner, icon);
+            // The banner or icon above stays loaded: a logo that does not decode falls back to it in bind.
+            if (logoDir != null && card == null) entry.logo = ThemeIcons.file(logoDir, pkg);
+            fresh.add(entry);
         }
         Collections.sort(fresh, (a, b) -> {
             // The owner's own order first; tiles it does not know (new installs) follow by the rule below.
@@ -405,7 +424,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             button.setOnFocusChangeListener((v, focused) -> { if (focused) listener.onLibraryFocused(); });
             button.setOnKeyListener((v, key, event) -> {
                 if (event.getAction() != KeyEvent.ACTION_DOWN) return false;
-                if (key == KeyEvent.KEYCODE_DPAD_UP) listener.onLibraryUp();
+                // Under a grid the pill is a footer: Up goes back to the last row. In a single row it sits after the
+                // last tile, so the key back towards the row (Left, or Right in a right-to-left grid) returns to it
+                // and Up goes on to the top bar, as from a tile. It used to take Left and send Up to the row.
+                int back = singleRow
+                        ? (rtlGrid ? KeyEvent.KEYCODE_DPAD_RIGHT : KeyEvent.KEYCODE_DPAD_LEFT)
+                        : KeyEvent.KEYCODE_DPAD_UP;
+                if (key == back) {
+                    listener.onLibraryUp();
+                    return true;
+                }
+                if (singleRow && key == KeyEvent.KEYCODE_DPAD_UP) return false;
                 return key == KeyEvent.KEYCODE_DPAD_UP || key == KeyEvent.KEYCODE_DPAD_DOWN
                         || key == KeyEvent.KEYCODE_DPAD_LEFT || key == KeyEvent.KEYCODE_DPAD_RIGHT;
             });
@@ -434,7 +463,17 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         name.setLayoutParams(nameLp);
         // A sideways row would stretch a match_parent item across the whole screen: give it a grid column's width.
         if (singleRow) v.getLayoutParams().width = inner / dockSize;
-        if (uniformTiles) {
+        if (logoTiles) {
+            // tile_style logo: the label becomes the wordmark of an app with no logo, centred in the logo's box.
+            TextView label = v.findViewById(R.id.label);
+            FrameLayout.LayoutParams labelLp = (FrameLayout.LayoutParams) label.getLayoutParams();
+            labelLp.gravity = android.view.Gravity.CENTER;
+            label.setLayoutParams(labelLp);
+            int padX = Math.round(w * (1f - LOGO_WIDTH_SHARE) / 2f);
+            label.setPadding(padX, 0, padX, 0);
+            label.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, wordmarkTextPx(h));
+            label.setTypeface(UiFont.get(ctx, R.string.font_medium));
+        } else if (uniformTiles) {
             // tvOS-style tile: a large centred mark, no caption inside the card.
             View icon = v.findViewById(R.id.icon);
             FrameLayout.LayoutParams iconLp = (FrameLayout.LayoutParams) icon.getLayoutParams();
@@ -452,7 +491,8 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             View label = v.findViewById(R.id.label);
             label.setPadding(label.getPaddingLeft(), label.getPaddingTop(), label.getPaddingRight(), Math.round(4f * density));
         }
-        return new Holder(v, listener, animations, advancedEffects, reducedMotion, restNameAlpha, focusOvershoot);
+        return new Holder(v, listener, animations, advancedEffects, reducedMotion, restNameAlpha, focusOvershoot,
+                focusScale(), restOpacity);
     }
 
     @Override
@@ -488,19 +528,39 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         h.card.setTranslationZ(focused && advancedEffects ? 8f * ctx.getResources().getDisplayMetrics().density : 0f);
         h.banner.setScaleX(focused && advancedEffects ? 1.035f : 1f);
         h.banner.setScaleY(focused && advancedEffects ? 1.035f : 1f);
+        ThemeIcons.Logo logo = e.logo != null ? logoFor(e.logo, h) : null;
+        // tile_style logo: an app tile has no card. A module card stays a card: its banner is the card.
+        boolean bare = logoTiles && e.kind != Entry.CARD;
+        // Every tile in a logo row dims, a module card's art included, so the row reads as one.
+        h.dimmed = logoTiles;
+        float alpha = contentAlpha(h.card.isFocused(), h.dimmed, restOpacity);
+        h.banner.setAlpha(alpha);
+        h.icon.setAlpha(alpha);
+        h.label.setAlpha(alpha);
+        setBare(h, bare);
+        if (bare) {
+            bindBare(h, e, logo);
+            bindActions(h, e);
+            return;
+        }
         // A fully opaque banner covers the whole card (centerCrop), so the card's own fill under it is drawn for
         // nothing on every frame; keep it under banners with transparent parts and under icon tiles.
-        h.card.setBackground(e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
-        if (uniformTiles && e.banner == null) {
+        h.card.setBackground(logo == null && e.banner != null && e.banner.getOpacity() == PixelFormat.OPAQUE ? null : h.cardBackground);
+        // A logo sits on the dark card (tile_bg); uniform_tiles' tinted fill is for the icon it replaces.
+        if (logo == null && uniformTiles && e.banner == null) {
             if (e.backdrop == null) e.backdrop = backdrop(e.icon, ambientColorAt(position));
             h.card.setBackground(new GradientDrawable(GradientDrawable.Orientation.TOP_BOTTOM, e.backdrop));
         }
-        if (e.banner != null) {
+        if (logo != null) {
+            showLogo(h, logo);
+        } else if (e.banner != null) {
+            clearLogo(h);
             h.banner.setImageDrawable(e.banner);
             h.banner.setVisibility(View.VISIBLE);
             h.icon.setVisibility(View.GONE);
             h.label.setVisibility(View.GONE);
         } else {
+            clearLogo(h);
             h.banner.setImageDrawable(null);
             h.banner.setVisibility(View.GONE);
             h.icon.setImageDrawable(e.icon);
@@ -508,6 +568,11 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             h.label.setText(e.label);
             h.label.setVisibility(uniformTiles ? View.GONE : View.VISIBLE);
         }
+        bindActions(h, e);
+    }
+
+    /** OK opens the tile; holding OK opens the tile menu, or the app's info without one. */
+    private void bindActions(Holder h, Entry e) {
         h.card.setOnClickListener(v -> launch(e));
         h.card.setOnLongClickListener(v -> {
             if (tileMenu) {
@@ -675,8 +740,108 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         return e.banner != null ? e.banner : e.icon;
     }
 
+    /** Share of the tile a logo may cover, across and down; the rest is margin on the card. */
+    static final float LOGO_WIDTH_SHARE = 0.8f, LOGO_HEIGHT_SHARE = 0.5f;
+
+    /**
+     * The logo for this tile's box, measured from the tile's real size (the card's layout params) at its focus
+     * zoom, so it stays sharp when the tile grows; ThemeIcons keys its cache on that size.
+     */
+    private ThemeIcons.Logo logoFor(File file, Holder h) {
+        ViewGroup.LayoutParams lp = h.card.getLayoutParams();
+        if (lp == null || lp.width <= 0 || lp.height <= 0) return null;
+        int[] box = logoBox(lp.width, lp.height, focusScale());
+        return ThemeIcons.get(file, box[0], box[1]);
+    }
+
+    /** The logo's box inside a tile of this size, at this focus zoom, in px. */
+    static int[] logoBox(int tileW, int tileH, float zoom) {
+        return new int[]{Math.round(tileW * LOGO_WIDTH_SHARE * zoom), Math.round(tileH * LOGO_HEIGHT_SHARE * zoom)};
+    }
+
+    /**
+     * The banner view's padding {x, y} for a logo: the margins logoBox leaves, less the logo's shadow margin as it
+     * is drawn, so the logo itself fills the box and its shadow spills into the margins around it.
+     */
+    static int[] logoPadding(int tileW, int tileH, int contentW, int contentH, int margin) {
+        float boxW = tileW * LOGO_WIDTH_SHARE, boxH = tileH * LOGO_HEIGHT_SHARE;
+        // FIT_CENTER draws the logo at the scale that fits it in the box, and its margin at the same scale.
+        float drawn = margin * Math.min(boxW / contentW, boxH / contentH);
+        int padX = Math.round((tileW - boxW) / 2f - drawn), padY = Math.round((tileH - boxH) / 2f - drawn);
+        return new int[]{Math.max(0, padX), Math.max(0, padY)};
+    }
+
+    /** Draws the logo centred in the banner view, inside the same margins logoBox leaves. */
+    private void showLogo(Holder h, ThemeIcons.Logo logo) {
+        ViewGroup.LayoutParams lp = h.card.getLayoutParams();
+        int[] pad = logoPadding(lp.width, lp.height, logo.contentWidth(), logo.contentHeight(), logo.margin);
+        h.banner.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        h.banner.setPadding(pad[0], pad[1], pad[0], pad[1]);
+        h.banner.setImageBitmap(logo.bitmap);
+        h.banner.setVisibility(View.VISIBLE);
+        h.icon.setVisibility(View.GONE);
+        h.label.setVisibility(View.GONE);
+    }
+
+    /** Share of the tile's height a wordmark's text takes (tile_style logo, an app with no logo). */
+    static final float WORDMARK_SHARE = 0.22f;
+
+    /**
+     * The opacity of a tile's logo, wordmark or card art: unfocused_opacity on a tile in a logo row that is not
+     * focused. Only the art views take it, never the card: an ImageView or TextView with no background draws its
+     * alpha directly, where a card with children would need an offscreen layer.
+     */
+    static float contentAlpha(boolean focused, boolean dimmed, float restOpacity) {
+        return dimmed && !focused ? restOpacity : 1f;
+    }
+
+    static float wordmarkTextPx(int tileH) {
+        return tileH * WORDMARK_SHARE;
+    }
+
+    /**
+     * tile_style logo: no card fill and no rounded outline, which would draw a shadow and clip the zoomed logo. A
+     * recycled view that held a module card gets them back.
+     */
+    private static void setBare(Holder h, boolean bare) {
+        if (bare == h.bare) return;
+        h.bare = bare;
+        h.card.setOutlineProvider(bare ? null : h.tileOutline);
+        h.card.setClipToOutline(!bare);
+        if (bare) h.card.setBackground(null);
+    }
+
+    /** The logo if the theme has one for this app, else the app's name as a white wordmark in the theme font. */
+    private void bindBare(Holder h, Entry e, ThemeIcons.Logo logo) {
+        h.icon.setImageDrawable(null);
+        h.icon.setVisibility(View.GONE);
+        if (logo != null) {
+            showLogo(h, logo);
+            return;
+        }
+        clearLogo(h);
+        h.banner.setImageDrawable(null);
+        h.banner.setVisibility(View.GONE);
+        h.label.setText(e.label);
+        h.label.setVisibility(View.VISIBLE);
+    }
+
+    /** Puts the banner view back as item_app.xml has it, for a recycled tile that showed a logo. */
+    private static void clearLogo(Holder h) {
+        if (h.banner.getScaleType() == ImageView.ScaleType.CENTER_CROP && h.banner.getPaddingLeft() == 0) return;
+        h.banner.setScaleType(ImageView.ScaleType.CENTER_CROP);
+        h.banner.setPadding(0, 0, 0, 0);
+    }
+
     float focusScale() {
-        return !animations ? 1f : advancedEffects ? 1.12f : 1.10f;
+        return focusScale(animations, advancedEffects, themeScale);
+    }
+
+    /** The focused tile's zoom: none without animations, else the theme's focus_scale, else 1.12 or 1.10. */
+    static float focusScale(boolean animations, boolean advancedEffects, float themeScale) {
+        if (!animations) return 1f;
+        if (themeScale > 0f) return themeScale;
+        return advancedEffects ? 1.12f : 1.10f;
     }
 
     /** A vivid colour sampled from the app's banner (or icon), cached per entry; a card's accent when it set one. */
@@ -915,9 +1080,15 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
         final boolean overshoot;
         /** A dock tile: it grows in place without advanced_effects' lift, which reads as off-centre in the band (#2135). */
         boolean inDock;
+        /** The card's rounded outline, kept for a recycled tile that goes back from bare (tile_style logo) to a card. */
+        final ViewOutlineProvider tileOutline;
+        /** tile_style logo: this tile is drawn with no card. */
+        boolean bare;
+        /** tile_style logo: this tile's art dims to unfocused_opacity while it is not focused. */
+        boolean dimmed;
 
         Holder(View v, TileListener listener, boolean animations, boolean advancedEffects,
-               boolean reducedMotion, float restNameAlpha, boolean overshoot) {
+               boolean reducedMotion, float restNameAlpha, boolean overshoot, float zoom, float restOpacity) {
             super(v);
             card = v.findViewById(R.id.card);
             cardBackground = card.getBackground();
@@ -932,13 +1103,14 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             this.overshoot = overshoot;
 
             final float density = v.getResources().getDisplayMetrics().density;
-            card.setOutlineProvider(new ViewOutlineProvider() {
+            tileOutline = new ViewOutlineProvider() {
                 @Override
                 public void getOutline(View view, Outline outline) {
                     // 16dp at the design width, scaled down with the tile so small tiles keep the same shape.
                     outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadius(view.getWidth(), density));
                 }
-            });
+            };
+            card.setOutlineProvider(tileOutline);
             card.setClipToOutline(true);
 
             card.setOnKeyListener((view, keyCode, event) -> {
@@ -952,9 +1124,23 @@ public class AppAdapter extends RecyclerView.Adapter<RecyclerView.ViewHolder> {
             card.setOnFocusChangeListener((view, focused) -> {
                 view.animate().cancel();
                 banner.animate().cancel();
+                icon.animate().cancel();
+                label.animate().cancel();
                 name.animate().cancel();
-                float scale = !animations ? 1f : advancedEffects ? 1.12f : 1.10f;
-                float s = focused ? scale : 1f;
+                float s = focused ? zoom : 1f;
+                // tile_style logo: the art views carry the opacity, never the card (see contentAlpha).
+                if (dimmed && restOpacity < 1f) {
+                    float a = contentAlpha(focused, true, restOpacity);
+                    if (!animations || reducedMotion) {
+                        banner.setAlpha(a);
+                        icon.setAlpha(a);
+                        label.setAlpha(a);
+                    } else {
+                        banner.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                        icon.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                        label.animate().alpha(a).setDuration(focused ? 180 : 220).start();
+                    }
+                }
                 if (!animations) {
                     view.setScaleX(1f);
                     view.setScaleY(1f);

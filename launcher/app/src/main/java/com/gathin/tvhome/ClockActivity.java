@@ -24,8 +24,10 @@ public class ClockActivity extends Activity {
     @SuppressWarnings("deprecation")
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        Config cfg = Config.load(this);
+        ThemeFontFactory.install(getWindow(), ThemeFont.load(this, cfg));
         setContentView(R.layout.dream_clock);
-        ClockFormat.apply(getWindow().getDecorView(), Config.load(this).clockFormat);
+        ClockFormat.apply(getWindow().getDecorView(), cfg.clockFormat);
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_FULLSCREEN
                 | View.SYSTEM_UI_FLAG_HIDE_NAVIGATION | View.SYSTEM_UI_FLAG_IMMERSIVE);
         scene = new ClockScene(getWindow().getDecorView());

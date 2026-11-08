@@ -39,6 +39,13 @@ final class Config {
     private static final String TAG = "TvHome.Config";
     static final String FILE_NAME = "config.json";
     static final String WALLPAPER_NAME = "wallpaper.jpg";
+
+    /** The theme's wallpaper.webp when wallpaper_animated is on and the file is there; null otherwise. */
+    static File animatedWallpaper(File dir, boolean on) {
+        if (!on || dir == null) return null;
+        File file = new File(dir, AnimatedWallpaper.FILE_NAME);
+        return file.isFile() && file.length() > 0 ? file : null;
+    }
     static final String SETTINGS_NAME = "launcher_settings";
     static final String ROWS_BELOW_DOCK_KEY = "rows_below_dock";
     static final String WALLPAPER_CHOICE_KEY = "wallpaper_choice";
@@ -255,6 +262,49 @@ final class Config {
 
     static final String GLOW_RADIAL = "radial", GLOW_HORIZON = "horizon";
     static final String GLASS_DEFAULT = "glass", GLASS_RIM = "rim", GLASS_HALO = "halo";
+    /** tile_style: "card" (the default, every tile on its card) or "logo" (the app's logo or name, no card). */
+    static final String TILE_CARD = "card", TILE_LOGO = "logo";
+    /** Home's app tiles as cards or as bare logos (config.json tile_style). */
+    final String tileStyle;
+    /** The glass highlight around the focused tile (config.json focus_frame); false leaves the zoom alone. */
+    final boolean focusFrame;
+    /** How far the focused tile grows (config.json focus_scale, 1.0-1.3), or 0 for the built-in 1.10 / 1.12. */
+    final float focusScale;
+    /** With tile_style logo, how opaque a tile's logo is while it is not focused (config.json unfocused_opacity). */
+    final float unfocusedOpacity;
+    /** header_position: "start" (default, clock top left) or "end" (clock and date top right, beside the buttons). */
+    static final String HEADER_START = "start", HEADER_END = "end";
+    final String headerPosition;
+    /** The clock's text size in sp (config.json clock_size, 24-72), or 0 for the layout's 52 sp. */
+    final int clockSize;
+    /** Today's five prayer times under the date (config.json prayer_times), computed offline by Prayer. */
+    final boolean prayerTimes;
+    /** The place for prayer_times (config.json prayer_latitude and prayer_longitude, else config.xml), NaN if unusable. */
+    final double latitude, longitude;
+    /** Minutes Prayer adds to Subuh, Ashar, Maghrib and Isya before rounding up (config.json prayer_ihtiyat, 0-5). */
+    final int prayerIhtiyat;
+    /** The round icon-only top buttons' size in dp (config.json top_button_size, 28-42), or 0 for 42. */
+    final int topButtonSize;
+    /** A soft dark shadow under the clock, the date and the prayer line (config.json header_shadow). */
+    final boolean headerShadow;
+    /** Seconds without a key before Home's app row fades out (config.json rows_autohide_seconds), 0 for never. */
+    final int rowsAutohideSeconds;
+    /** Left from a row's first tile goes to its last and Right from the last to the first (config.json row_wrap). */
+    final boolean rowWrap;
+    /** Down from Home's last row opens the App library (config.json down_opens_library); needs app_library. */
+    final boolean downOpensLibrary;
+    /** config.json wallpaper_animated: the theme's wallpaper.webp, played over wallpaper.jpg; null when off. */
+    final File wallpaperAnimated;
+    /** config.json wallpaper_pause_seconds: pause the animated wallpaper after that long with no key; 0 never. */
+    final int wallpaperPauseSeconds;
+    /** config.json wallpaper_smooth: the animated wallpaper is drawn with bilinear filtering when scaled up. */
+    final boolean wallpaperSmooth;
+    /** prayer_style: "line" (default, the five times as text) or "timeline" (a 24-hour line with five dots). */
+    static final String PRAYER_LINE = "line", PRAYER_TIMELINE = "timeline";
+    final String prayerStyle;
+    /** prayer_glow_color: the glow of the next prayer on the timeline; red by default. */
+    static final int PRAYER_GLOW_DEFAULT = 0xFFFF3B30;
+    final int prayerGlowColor;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -275,6 +325,12 @@ final class Config {
     final int clockWallpaperDim;
     /** The clock screensaver's coloured glow; false leaves the clock on plain black, e.g. for an OLED (config.xml, clock_glow). */
     final boolean clockGlow;
+    /** A font file in the theme's fonts/ folder (config.json font), or "" for the bundled Outfit. */
+    final String font;
+    /** Multiplies every sp text size (config.json font_scale, 0.85-1.25); 1 leaves the sizes as they are. */
+    final float fontScale;
+    /** Each app's logo from the theme's icons/<package>.png instead of its banner or icon (config.json app_logos). */
+    final boolean appLogos;
     /** Every app in the dock's row, which scrolls sideways, and no grid below it (config.xml, single_row); needs dock_row. */
     final boolean singleRow;
     /** With single_row, the band runs behind every app in the row, not only the dock apps (config.xml, dock_band_all). */
@@ -294,7 +350,36 @@ final class Config {
                    boolean keyFilter, boolean dockGlass, String glowStyle, boolean wallpaperCaptions,
                    boolean handleViewInputs, boolean tileMenu, boolean dockEvenPadding, boolean dockBand, boolean cinematicDots, boolean cinematicWhiteFocus, boolean wifiStatusColor, int cinematicScrim, int cinematicArt,
                    Map<String, Set<String>> wallpaperMoods, boolean gamepadPassthrough, boolean consumeVolumeKeys, boolean homeIgnoreChannelKeys, boolean powerOnHome, boolean homeLongPressHome, boolean wifiStatusWarnings, List<String> topBarApps, boolean showGreeting, boolean headerWhite, boolean clockWallpaper, int clockWallpaperDim, boolean clockGlow, String glassStyle, boolean singleRow, boolean dockBandAll, boolean lunarDate, int lunarUtcOffset, boolean dateBelowClock, boolean vpnPill, String locale, boolean powerOnHomeAlways, boolean inputsConnectedOnly, boolean inputsCecStateOnly,
-                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap) {
+                   int openOnStartNetworkWait, boolean openOnStartOnWake, boolean iconOnlyVpn, String clockFormat, boolean backOpensClock, boolean glowSnap,
+                   String font, float fontScale, boolean appLogos, String tileStyle, boolean focusFrame,
+                   float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
+                   double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
+                   int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary, File wallpaperAnimated,
+                   int wallpaperPauseSeconds, boolean wallpaperSmooth, String prayerStyle, int prayerGlowColor) {
+        this.font = font;
+        this.prayerStyle = PRAYER_TIMELINE.equalsIgnoreCase(prayerStyle == null ? "" : prayerStyle.trim())
+                ? PRAYER_TIMELINE : PRAYER_LINE;
+        this.prayerGlowColor = prayerGlowColor;
+        this.wallpaperSmooth = wallpaperSmooth;
+        this.wallpaperPauseSeconds = wallpaperPauseSeconds;
+        this.wallpaperAnimated = wallpaperAnimated;
+        this.rowWrap = rowWrap;
+        this.downOpensLibrary = downOpensLibrary;
+        this.rowsAutohideSeconds = rowsAutohideSeconds;
+        this.headerShadow = headerShadow;
+        this.topButtonSize = topButtonSize;
+        this.headerPosition = headerPosition(headerPosition);
+        this.clockSize = clockSize;
+        this.prayerTimes = prayerTimes;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.prayerIhtiyat = prayerIhtiyat;
+        this.unfocusedOpacity = unfocusedOpacity;
+        this.focusFrame = focusFrame;
+        this.focusScale = focusScale;
+        this.tileStyle = tileStyle(tileStyle);
+        this.appLogos = appLogos;
+        this.fontScale = fontScale;
         this.handleViewInputs = handleViewInputs;
         this.tileMenu = tileMenu;
         this.inputKeycodes = inputKeycodes;
@@ -427,9 +512,24 @@ final class Config {
         return GLASS_HALO.equalsIgnoreCase(v) ? GLASS_HALO : GLASS_DEFAULT;
     }
 
-    /** The folder the theme tools push into; null when external storage is unavailable. */
-    static File dir(Context ctx) {
+    /** The folder the theme tools push into (the root theme, active_theme, themes/); null when unavailable. */
+    static File root(Context ctx) {
         return ctx.getExternalFilesDir(null);
+    }
+
+    /**
+     * The theme in use: a slot (themes/<slug>), the root theme, or null for the built-in config.xml, as active_theme
+     * says (ThemeSlots.resolve); null too when external storage is unavailable. Every theme file is read from here.
+     */
+    static File dir(Context ctx) {
+        File root = root(ctx);
+        if (root == null) return null;
+        String pointer = ThemeSlots.pointer(new File(root, ThemeFiles.ACTIVE));
+        if (pointer == null) return root;
+        File slots = new File(root, ThemeFiles.THEMES);
+        String resolved = ThemeSlots.resolve(pointer, new File(root, FILE_NAME).isFile(),
+                slug -> read(new File(new File(slots, slug), FILE_NAME)) != null);
+        return ThemeSlots.folder(root, resolved);
     }
 
     static Config load(Context ctx) {
@@ -541,6 +641,29 @@ final class Config {
         String glassStyle = res.getString(R.string.glass_style);
         boolean singleRow = res.getBoolean(R.bool.single_row);
         boolean dockBandAll = res.getBoolean(R.bool.dock_band_all);
+        String font = "";
+        float fontScale = 1f;
+        boolean appLogos = false;
+        String tileStyle = TILE_CARD;
+        boolean focusFrame = true;
+        float focusScale = 0f;
+        float unfocusedOpacity = 1f;
+        String headerPosition = HEADER_START;
+        int clockSize = 0;
+        boolean prayerTimes = false;
+        double latitude = coordinate(res.getString(R.string.latitude), 90);
+        double longitude = coordinate(res.getString(R.string.longitude), 180);
+        int prayerIhtiyat = Prayer.IHTIYAT_DEFAULT;
+        int topButtonSize = 0;
+        boolean headerShadow = false;
+        int rowsAutohideSeconds = 0;
+        boolean rowWrap = false;
+        boolean downOpensLibrary = false;
+        boolean wallpaperAnimatedOn = false;
+        int wallpaperPauseSeconds = 0;
+        boolean wallpaperSmooth = false;
+        String prayerStyle = PRAYER_LINE;
+        int prayerGlowColor = PRAYER_GLOW_DEFAULT;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -657,6 +780,30 @@ final class Config {
             dockBandAll = bool(json, "dock_band_all", dockBandAll);
             glowStyle = string(json, "glow_style", glowStyle);
             glassStyle = string(json, "glass_style", glassStyle);
+            font = fontName(string(json, "font", font));
+            fontScale = fontScale(json.opt("font_scale"), fontScale);
+            appLogos = bool(json, "app_logos", appLogos);
+            tileStyle = string(json, "tile_style", tileStyle);
+            focusFrame = bool(json, "focus_frame", focusFrame);
+            focusScale = focusScale(json.opt("focus_scale"), focusScale);
+            unfocusedOpacity = unfocusedOpacity(json.opt("unfocused_opacity"), unfocusedOpacity);
+            headerPosition = string(json, "header_position", headerPosition);
+            clockSize = integer(json, "clock_size", clockSize, 24, 72);
+            prayerTimes = bool(json, "prayer_times", prayerTimes);
+            latitude = coordinate(json.opt("prayer_latitude"), 90, latitude);
+            longitude = coordinate(json.opt("prayer_longitude"), 180, longitude);
+            prayerIhtiyat = integer(json, "prayer_ihtiyat", prayerIhtiyat, 0, 5);
+            topButtonSize = integer(json, "top_button_size", topButtonSize, 28, 42);
+            headerShadow = bool(json, "header_shadow", headerShadow);
+            rowsAutohideSeconds = integer(json, "rows_autohide_seconds", rowsAutohideSeconds, 0, 3600);
+            rowWrap = bool(json, "row_wrap", rowWrap);
+            downOpensLibrary = bool(json, "down_opens_library", downOpensLibrary);
+            wallpaperAnimatedOn = bool(json, "wallpaper_animated", wallpaperAnimatedOn);
+            wallpaperPauseSeconds = WallpaperPause.seconds(
+                    integer(json, "wallpaper_pause_seconds", wallpaperPauseSeconds, 0, 86_400));
+            wallpaperSmooth = bool(json, "wallpaper_smooth", wallpaperSmooth);
+            prayerStyle = string(json, "prayer_style", prayerStyle);
+            prayerGlowColor = color(json, "prayer_glow_color", prayerGlowColor);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -664,7 +811,7 @@ final class Config {
         // current theme without clearing choices from an older launcher version.
         SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
         // Unmounted storage looks like a theme reset; compare only once the file is readable.
-        if (mounted) syncThemeChoices(choices, dir, file);
+        if (mounted) syncThemeChoices(choices, root(ctx), file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
@@ -720,7 +867,65 @@ final class Config {
                 consumeVolumeKeys, homeIgnoreChannelKeys, powerOnHome, homeLongPressHome, wifiStatusWarnings, topBarApps, showGreeting, headerWhite, clockWallpaper,
                 Math.max(0, Math.min(90, clockWallpaperDim)), clockGlow, glassStyle, singleRow && dockRow, dockBandAll, lunar, lunarOffset,
                 dateBelowClock, vpnPill, locale, powerOnHomeAlways, inputsConnectedOnly, inputsCecStateOnly,
-                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap);
+                Math.max(0, Math.min(600, openOnStartNetworkWait)), openOnStartOnWake, iconOnlyVpn, clockFormat, backOpensClock, glowSnap,
+                font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
+                headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
+                topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library,
+                animatedWallpaper(dir, wallpaperAnimatedOn && wallpaperEnabled), wallpaperPauseSeconds,
+                wallpaperSmooth, prayerStyle, prayerGlowColor);
+    }
+
+    /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
+    static String fontName(String name) {
+        return name != null && ThemeFiles.fontFile(name) ? name : "";
+    }
+
+    /** font_scale between 0.85 and 1.25; anything else, or a value that is not a number, keeps the fallback. */
+    /** A known tile_style, or card (the default) for anything else. */
+    static String tileStyle(String value) {
+        return value != null && TILE_LOGO.equalsIgnoreCase(value.trim()) ? TILE_LOGO : TILE_CARD;
+    }
+
+    /** focus_scale: a number from 1.0 (no zoom) to 1.3, or the fallback for anything else. */
+    static float focusScale(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 1f && f <= 1.3f ? f : fallback;
+    }
+
+    /** A known header_position, or start (the default) for anything else. */
+    static String headerPosition(String value) {
+        return value != null && HEADER_END.equalsIgnoreCase(value.trim()) ? HEADER_END : HEADER_START;
+    }
+
+    /** A latitude or longitude from config.json: a number within +-limit degrees, or the fallback. */
+    static double coordinate(Object v, double limit, double fallback) {
+        if (!(v instanceof Number)) return fallback;
+        double d = ((Number) v).doubleValue();
+        return !Double.isNaN(d) && Math.abs(d) <= limit ? d : fallback;
+    }
+
+    /** The same from config.xml's latitude and longitude strings; NaN when empty or unusable. */
+    static double coordinate(String v, double limit) {
+        if (v == null || v.trim().isEmpty()) return Double.NaN;
+        try {
+            return coordinate(Double.parseDouble(v.trim()), limit, Double.NaN);
+        } catch (NumberFormatException e) {
+            return Double.NaN;
+        }
+    }
+
+    /** unfocused_opacity: a number from 0.3 to 1.0 (no dimming), or the fallback for anything else. */
+    static float unfocusedOpacity(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 0.3f && f <= 1f ? f : fallback;
+    }
+
+    static float fontScale(Object v, float fallback) {
+        if (!(v instanceof Number)) return fallback;
+        float f = ((Number) v).floatValue();
+        return f >= 0.85f && f <= 1.25f ? f : fallback;
     }
 
     /**
@@ -791,6 +996,11 @@ final class Config {
         } catch (Exception ignored) {
             return "absent";
         }
+    }
+
+    /** A theme's config.json as read(): null for anything Home would not use (ThemeSlots, the picker). */
+    static JSONObject readTheme(File file) {
+        return read(file);
     }
 
     /** Reads and parses the overlay; any problem means "no overlay", never a crash on the home screen. */

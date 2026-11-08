@@ -1,0 +1,11 @@
+# Official prayer times, Kementerian Agama RI (Ditjen Bimas Islam), data SIHAT Kemenag RI.
+# Source: https://bimasislam.kemenag.go.id/jadwal-sholat, DKI JAKARTA, KOTA JAKARTA, read 2026-11-07.
+# Place as Kemenag gives it: 6 10 12.32 S, 106 49 51.78 E; times in WIB (UTC+7).
+# TUNING SET: used to confirm Prayer.java's parameters (Dzuhur +3 min, Maghrib at -1.0 degrees). Never the test set.
+date,subuh,dzuhur,ashar,maghrib,isya
+2026-01-01,04:19,12:00,15:26,18:14,19:29
+2026-03-20,04:42,12:04,15:13,18:07,19:15
+2026-06-21,04:40,11:58,15:19,17:51,19:05
+2026-08-01,04:45,12:03,15:24,17:58,19:09
+2026-09-23,04:27,11:49,14:58,17:52,19:00
+2026-12-21,04:13,11:54,15:20,18:08,19:24

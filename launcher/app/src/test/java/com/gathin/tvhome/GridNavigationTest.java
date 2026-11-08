@@ -142,4 +142,67 @@ public class GridNavigationTest {
         }
         return false;
     }
+
+    // row_wrap
+
+    @Test public void rightFromTheLastTileWrapsToTheFirst() {
+        assertEquals(0, GridNavigation.wrapTarget(4, 0, 4, false, false));
+    }
+
+    @Test public void leftFromTheFirstTileWrapsToTheLast() {
+        assertEquals(4, GridNavigation.wrapTarget(0, 0, 4, false, true));
+    }
+
+    @Test public void midRowMovesDoNotWrap() {
+        assertEquals(-1, GridNavigation.wrapTarget(2, 0, 4, false, true));
+        assertEquals(-1, GridNavigation.wrapTarget(2, 0, 4, false, false));
+        assertEquals(-1, GridNavigation.wrapTarget(0, 0, 4, false, false));
+        assertEquals(-1, GridNavigation.wrapTarget(4, 0, 4, false, true));
+    }
+
+    @Test public void aRowOfOneTileHasNothingToWrapTo() {
+        assertEquals(-1, GridNavigation.wrapTarget(0, 0, 0, false, true));
+        assertEquals(-1, GridNavigation.wrapTarget(0, 0, 0, false, false));
+    }
+
+    @Test public void rightToLeftWrapsTheOtherWay() {
+        // The first tile is on the right: Right from it goes to the last, Left from the last back to the first.
+        assertEquals(4, GridNavigation.wrapTarget(0, 0, 4, true, false));
+        assertEquals(0, GridNavigation.wrapTarget(4, 0, 4, true, true));
+        assertEquals(-1, GridNavigation.wrapTarget(0, 0, 4, true, true));
+    }
+
+    @Test public void aGridRowWrapsWithinItself() {
+        // Second row of a 4-column grid with 11 tiles: positions 4-7; the short last row is 8-10.
+        assertEquals(4, GridNavigation.wrapTarget(7, 4, 7, false, false));
+        assertEquals(7, GridNavigation.wrapTarget(4, 4, 7, false, true));
+        assertEquals(8, GridNavigation.wrapTarget(10, 8, 10, false, false));
+    }
+
+    // Down from a tile
+
+    @Test public void downInASingleRowStaysByDefault() {
+        assertEquals(GridNavigation.DOWN_STAY, GridNavigation.down(2, 5, 6, true, false, false));
+    }
+
+    @Test public void downInASingleRowOpensTheLibraryWhenAsked() {
+        assertEquals(GridNavigation.DOWN_LIBRARY, GridNavigation.down(0, 5, 6, true, false, true));
+        assertEquals(GridNavigation.DOWN_LIBRARY, GridNavigation.down(4, 5, 6, true, false, true));
+    }
+
+    @Test public void aShownPillWinsOverOpeningTheLibrary() {
+        assertEquals(GridNavigation.DOWN_PILL, GridNavigation.down(2, 5, 6, true, true, false));
+        assertEquals(GridNavigation.DOWN_PILL, GridNavigation.down(2, 5, 6, true, true, true));
+    }
+
+    @Test public void gridRowsAboveTheLastMoveDown() {
+        assertEquals(GridNavigation.DOWN_ROW, GridNavigation.down(3, 11, 4, false, true, true));
+        assertEquals(GridNavigation.DOWN_ROW, GridNavigation.down(7, 11, 4, false, false, true));
+    }
+
+    @Test public void theGridsLastRowOpensTheLibraryOrStays() {
+        assertEquals(GridNavigation.DOWN_LIBRARY, GridNavigation.down(8, 11, 4, false, false, true));
+        assertEquals(GridNavigation.DOWN_STAY, GridNavigation.down(10, 11, 4, false, false, false));
+        assertEquals(GridNavigation.DOWN_PILL, GridNavigation.down(9, 11, 4, false, true, false));
+    }
 }
