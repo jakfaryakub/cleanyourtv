@@ -73,6 +73,8 @@ final class WallpaperPlayer {
     /** wallpaper_animated: the theme's wallpaper.webp, or null when off or once it turned out unplayable. */
     private File animatedFile;
     private final boolean reducedMotion;
+    /** wallpaper_smooth: decode the animation at the screen's size so it is drawn filtered, not in 3 px blocks. */
+    private final boolean smooth;
     /** The playing AnimatedImageDrawable (as a Drawable, so API 26 never loads the class); null while the JPG shows. */
     private Drawable animation;
     private boolean animationLoading;
@@ -110,6 +112,7 @@ final class WallpaperPlayer {
         caption = names.isEmpty() ? null : makeCaption(context, root);
         animatedFile = config.wallpaperAnimated;
         reducedMotion = config.reducedMotion;
+        smooth = config.wallpaperSmooth;
         boolean still = config.wallpaperEnabled && !files.isEmpty();
         if (still || animatedFile != null) {
             root.addView(image, 0, new FrameLayout.LayoutParams(
@@ -224,9 +227,10 @@ final class WallpaperPlayer {
             return;
         }
         File file = animatedFile;
+        int screenWidth = smooth ? width : 0, screenHeight = smooth ? height : 0;
         animationLoading = true;
         decoder.execute(() -> {
-            Drawable decoded = Build.VERSION.SDK_INT >= 28 ? Api28.decode(file) : null;
+            Drawable decoded = Build.VERSION.SDK_INT >= 28 ? Api28.decode(file, screenWidth, screenHeight) : null;
             root.post(() -> {
                 animationLoading = false;
                 if (decoded == null) {
@@ -405,8 +409,12 @@ final class WallpaperPlayer {
     private static final class Api28 {
         private Api28() { }
 
-        /** wallpaper.webp as a looping AnimatedImageDrawable at no more than 960x540, or null (logged). */
-        static Drawable decode(File file) {
+        /**
+         * wallpaper.webp as a looping AnimatedImageDrawable at no more than 960x540, or null (logged). With a screen
+         * size (wallpaper_smooth) a smaller file is asked for at that size: its frames stay at the file's size and
+         * Skia scales them with bilinear filtering.
+         */
+        static Drawable decode(File file, int screenWidth, int screenHeight) {
             try {
                 byte[] header = new byte[12];
                 try (java.io.FileInputStream in = new java.io.FileInputStream(file)) {
@@ -421,7 +429,9 @@ final class WallpaperPlayer {
                             if (!AnimatedWallpaper.acceptedSize(width, height)) {
                                 throw new IllegalArgumentException(width + "x" + height + " is over 1920x1080");
                             }
-                            int[] size = AnimatedWallpaper.decodeSize(width, height);
+                            int[] size = screenWidth > 0
+                                    ? AnimatedWallpaper.smoothSize(width, height, screenWidth, screenHeight)
+                                    : AnimatedWallpaper.decodeSize(width, height);
                             decoder.setTargetSize(size[0], size[1]);
                             decoder.setMemorySizePolicy(ImageDecoder.MEMORY_POLICY_LOW_RAM);
                         });

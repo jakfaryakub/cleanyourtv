@@ -41,6 +41,20 @@ final class AnimatedWallpaper {
     }
 
     /**
+     * wallpaper_smooth: the size to ask the decoder for so the drawable already covers the screen. A file smaller than
+     * the screen is scaled up by the factor that covers it (as CENTER_CROP would), keeping its shape; libwebp cannot
+     * decode larger than the file, so Skia keeps the frames at the file's size and draws them through a matrix with
+     * bilinear filtering instead of the view scaling them up nearest-neighbour. A file that already covers the screen
+     * gets decodeSize, so nothing changes for it.
+     */
+    static int[] smoothSize(int width, int height, int screenWidth, int screenHeight) {
+        if (screenWidth <= 0 || screenHeight <= 0) return decodeSize(width, height);
+        double scale = Math.max((double) screenWidth / width, (double) screenHeight / height);
+        if (scale <= 1) return decodeSize(width, height);
+        return new int[] {(int) Math.ceil(width * scale - 1e-9), (int) Math.ceil(height * scale - 1e-9)};
+    }
+
+    /**
      * The file's first 12 bytes are a RIFF/WEBP header whose length matches the file. A file cut short (a push that
      * stopped) still decodes, as the frames before the cut, so it is refused here instead of playing a broken loop.
      */

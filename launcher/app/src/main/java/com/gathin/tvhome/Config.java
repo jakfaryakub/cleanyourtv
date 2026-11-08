@@ -297,6 +297,8 @@ final class Config {
     final File wallpaperAnimated;
     /** config.json wallpaper_pause_seconds: pause the animated wallpaper after that long with no key; 0 never. */
     final int wallpaperPauseSeconds;
+    /** config.json wallpaper_smooth: the animated wallpaper is drawn with bilinear filtering when scaled up. */
+    final boolean wallpaperSmooth;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -347,8 +349,9 @@ final class Config {
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
                    double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
                    int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary, File wallpaperAnimated,
-                   int wallpaperPauseSeconds) {
+                   int wallpaperPauseSeconds, boolean wallpaperSmooth) {
         this.font = font;
+        this.wallpaperSmooth = wallpaperSmooth;
         this.wallpaperPauseSeconds = wallpaperPauseSeconds;
         this.wallpaperAnimated = wallpaperAnimated;
         this.rowWrap = rowWrap;
@@ -634,6 +637,7 @@ final class Config {
         boolean downOpensLibrary = false;
         boolean wallpaperAnimatedOn = false;
         int wallpaperPauseSeconds = 0;
+        boolean wallpaperSmooth = false;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -771,6 +775,7 @@ final class Config {
             wallpaperAnimatedOn = bool(json, "wallpaper_animated", wallpaperAnimatedOn);
             wallpaperPauseSeconds = WallpaperPause.seconds(
                     integer(json, "wallpaper_pause_seconds", wallpaperPauseSeconds, 0, 86_400));
+            wallpaperSmooth = bool(json, "wallpaper_smooth", wallpaperSmooth);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -838,7 +843,8 @@ final class Config {
                 font, fontScale, appLogos, tileStyle, focusFrame, focusScale, unfocusedOpacity,
                 headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
                 topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library,
-                animatedWallpaper(dir, wallpaperAnimatedOn && wallpaperEnabled), wallpaperPauseSeconds);
+                animatedWallpaper(dir, wallpaperAnimatedOn && wallpaperEnabled), wallpaperPauseSeconds,
+                wallpaperSmooth);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */

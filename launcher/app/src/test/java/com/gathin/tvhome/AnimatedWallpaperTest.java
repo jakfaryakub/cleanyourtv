@@ -78,4 +78,21 @@ public class AnimatedWallpaperTest {
     @Test public void aSizeOver2GbIsReadUnsigned() {
         assertTrue(AnimatedWallpaper.complete(header("RIFF", 0xFFFF_FFF0L, "WEBP"), 0xFFFF_FFF8L));
     }
+
+    @Test public void smoothAsksForTheScreenSizeForASmallerFile() {
+        assertArrayEquals(new int[] {1920, 1080}, AnimatedWallpaper.smoothSize(640, 360, 1920, 1080));
+        assertArrayEquals(new int[] {1920, 1080}, AnimatedWallpaper.smoothSize(800, 450, 1920, 1080));
+        assertArrayEquals(new int[] {1280, 720}, AnimatedWallpaper.smoothSize(640, 360, 1280, 720));
+    }
+
+    @Test public void smoothCoversTheScreenKeepingTheFilesShape() {
+        // 4:3 on 16:9: covered by width, as CENTER_CROP would, and the height overflows.
+        assertArrayEquals(new int[] {1920, 1440}, AnimatedWallpaper.smoothSize(640, 480, 1920, 1080));
+    }
+
+    @Test public void smoothLeavesAFileThatCoversTheScreenToDecodeSize() {
+        assertArrayEquals(new int[] {960, 540}, AnimatedWallpaper.smoothSize(1920, 1080, 1920, 1080));
+        assertArrayEquals(new int[] {960, 540}, AnimatedWallpaper.smoothSize(1920, 1080, 1280, 720));
+        assertArrayEquals(new int[] {640, 360}, AnimatedWallpaper.smoothSize(640, 360, 0, 0));
+    }
 }
