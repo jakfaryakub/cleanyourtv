@@ -22,8 +22,54 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps, pause after 300 s, `wallpaper_dim` 25 |
 | 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
-| 4c | Smooth animated wallpaper: `wallpaper_smooth` (bilinear instead of 3 px blocks), and an 800×450 variant | proposed, see "Before Phase 3" |
-| 1b.7 | Prayer times as a 24-hour timeline: `prayer_style: "timeline"` (default `"line"`), `prayer_glow_color` | proposed, mock-ups for a choice |
+| 4c | Smooth animated wallpaper: `wallpaper_smooth` (bilinear instead of 3 px blocks) | done; 800×450 not taken |
+| 1b.7 | Prayer times as a 24-hour timeline: `prayer_style: "timeline"` (default `"line"`), `prayer_glow_color` | done, variant 2 (label on the next prayer only) |
+
+## Phase 4c and 1b.7 result
+
+**CI first.** PR #1's "Lists, tools and docs" job failed on `test_switches`: `row_wrap`, `down_opens_library`,
+`wallpaper_animated` and `wallpaper_pause_seconds` had no screenshot row in `docs/switches.md`. Fixed in its own
+commit, with T6C screenshots; the animated one uses a generated gradient clip, not the private wallpaper.
+
+**`wallpaper_smooth`** (off by default). With the key, `Api28.decode` asks for the screen's size
+(`AnimatedWallpaper.smoothSize`, unit tested) when the file is smaller. Checked on the TV with a fixed two-frame
+640×360 clip (`work/theme-crop`, frame 26 of the real clip): two pixels at the bottom left, black and white in the
+file, came out as 7, 68, 129, 191 across the screen's pixels with the key, a hard 3 px step without. The crops of the
+eye under the clock and the left iris (`shots/4c-crop-tv.png`, not committed) match the local simulation: the
+staircase on the lashes and the square sparkles are gone. The text drawn over it is unchanged. The 800×450 variant
+(2,143,868 B) was not taken: filtering does most of the work, and it would cost about 50% more CPU.
+
+**`prayer_style: "timeline"`** (variant 2) and **`prayer_glow_color`** (`#FF3B30` by default). `PrayerTimeline`
+draws in `onDraw` only: a 285 dp line for 00:00-24:00 under the date, ticks every 6 hours, five dots, a now tick, and
+the next prayer as a red dot with a radial glow and the only label ("Maghrib 17:51", bold theme font, at the prayer
+line's size). Passed dots are dimmed. With `header_shadow` every mark gets a dark edge and the label the header's
+text shadow: it reads over the bright eye. `minuteTick` moves the now tick; `prayerTick` still changes the next
+prayer on its minute; a model that has not changed is not redrawn. After Isha today's dots stay, all dimmed, and the
+glow and label go to Fajr's dot with tomorrow's time. `PrayerTimelineModel` is unit tested (positions, the now tick,
+a prayer passed from its own minute, after Isha, midnight, a time that does not happen). The first glow was faint on
+the TV and was made stronger (centre alpha 0x99 to 0xD9, radius 13 to 15 dp). The after-Isha look was not seen on the
+TV: that needs the TV's clock past 19:03, and the system time was left alone.
+
+A/B/A after one clean boot (unplugged), the experiment theme with `down_opens_library` off: A without, B with
+`wallpaper_smooth` and `prayer_style: "timeline"`. Each run 90 s after its push, `SKIP_GATE=1` (the animation keeps
+the TV under the gate, as in 4a part 2). Idle CPU is the mean of `top`'s last five 10 s samples, with Home idle and
+the animation playing.
+
+| | A | B | A again |
+|---|---|---|---|
+| Uptime | 4 min | 8 min | 13 min |
+| MemAvailable / SwapFree | 928,832 / 383,996 kB | 927,928 / 384,252 kB | 921,788 / 386,812 kB |
+| PSS after warm-up | 50,402 KB | 50,788 KB | 51,804 KB |
+| PSS after keys | 41,177 KB | 39,620 KB | 40,995 KB |
+| D-pad frames, janky | 578, 1.04% | 576, 1.22% | 577, 0.69% |
+| D-pad frame p50 / p90 | 11 / 13 ms | 11 / 13 ms | 11 / 13 ms |
+| D-pad GPU p50 / p90 | 7 / 9 ms | 8 / 9 ms | 9 / 9 ms |
+| Idle 30 s: frames, janky | 364, 0.82% | 366, 1.37% | 365, 1.37% |
+| Launcher CPU, Home idle | 20.7% | 21.0% | 20.6% |
+
+B passes: PSS within the two A runs (+0.4 MB at most), janky +0.2 to +0.5 pp, idle CPU +0.3 pp. Bilinear sampling
+and a view redrawn once a minute cost nothing the runs can tell apart. APK 603,389 B, lint 0 errors. Both keys are
+on in `work/theme-ref`.
 
 ## Before Phase 3
 
