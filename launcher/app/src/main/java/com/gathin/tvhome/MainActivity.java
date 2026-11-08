@@ -173,6 +173,11 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
     private LocalDate prayerDay;
     /** The prayer drawn in bold, or -1 before the line is first drawn. */
     private int prayerNext = -1;
+    /** prayer_style timeline: the 24-hour line in place of prayerLine; null otherwise. */
+    private PrayerTimeline prayerTimeline;
+    /** Today's times for the timeline and the day they are for; recomputed when the date changes. */
+    private int[] timelineToday;
+    private LocalDate timelineDay;
     /** Redraws the prayer line at the minute the next prayer comes, or at midnight. */
     private final Runnable prayerTick = this::updatePrayerLine;
     /** rows_autohide_seconds: when the app row fades out and how the first key brings it back; null when off. */
@@ -467,6 +472,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
             if (festive) updateWifiLabel();
             sky.update();
             wallpaperPlayer.update();
+            updatePrayerTimeline();
             handler.postDelayed(this, MINUTE_MS);
         }
     };
@@ -2703,6 +2709,31 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         prayerLat = cfg.latitude;
         prayerLon = cfg.longitude;
         prayerIhtiyat = cfg.prayerIhtiyat;
+        TextView date = findViewById(R.id.date);
+        float dateSp = date.getTextSize() / getResources().getDisplayMetrics().scaledDensity;
+        float textSp = Math.max(15f, dateSp);
+        View stats = findViewById(R.id.stats);
+        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.addRule(RelativeLayout.BELOW, showStats ? R.id.stats : R.id.leftBlock);
+        if (end) lp.addRule(RelativeLayout.ALIGN_PARENT_END);
+        else lp.addRule(RelativeLayout.ALIGN_START, R.id.leftBlock);
+        if (Config.PRAYER_TIMELINE.equals(cfg.prayerStyle)) {
+            ThemeFont font = ThemeFont.current();
+            android.graphics.Typeface bold = font != null ? font.get(700) : null;
+            if (bold == null) {
+                bold = android.graphics.Typeface.create(UiFont.get(this, R.string.font_regular),
+                        android.graphics.Typeface.BOLD);
+            }
+            PrayerTimeline timeline = new PrayerTimeline(this,
+                    TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, textSp, getResources().getDisplayMetrics()),
+                    bold, cfg.prayerGlowColor);
+            timeline.setId(View.generateViewId());
+            lp.topMargin = Math.round(4 * density);
+            ((ViewGroup) stats.getParent()).addView(timeline, lp);
+            prayerTimeline = timeline;
+            return;
+        }
         TextView line = new TextView(this);
         line.setId(View.generateViewId());
         line.setSingleLine(true);
@@ -2710,17 +2741,9 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         line.setIncludeFontPadding(false);
         line.setTextColor(0xB3FFFFFF);
         // At least the date's size, so the line reads from the sofa as well as the date does.
-        TextView date = findViewById(R.id.date);
-        float dateSp = date.getTextSize() / getResources().getDisplayMetrics().scaledDensity;
-        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, Math.max(15f, dateSp));
+        line.setTextSize(TypedValue.COMPLEX_UNIT_SP, textSp);
         line.setLetterSpacing(0.02f);
         line.setTypeface(UiFont.get(this, R.string.font_regular));
-        View stats = findViewById(R.id.stats);
-        RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
-                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        lp.addRule(RelativeLayout.BELOW, showStats ? R.id.stats : R.id.leftBlock);
-        if (end) lp.addRule(RelativeLayout.ALIGN_PARENT_END);
-        else lp.addRule(RelativeLayout.ALIGN_START, R.id.leftBlock);
         lp.topMargin = Math.round(10 * density);
         ((ViewGroup) stats.getParent()).addView(line, lp);
         prayerLine = line;
@@ -2736,6 +2759,7 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
         int[] ids = {R.id.clock, R.id.ampm, R.id.date, R.id.greeting, R.id.shamsiDate, R.id.lunarDate};
         for (int id : ids) ((TextView) findViewById(id)).setShadowLayer(radius, 0, dy, colour);
         if (prayerLine != null) prayerLine.setShadowLayer(radius, 0, dy, colour);
+        if (prayerTimeline != null) prayerTimeline.setShadow(true);
     }
 
     /** A key, or Home pressed: the wait starts over, and a paused wallpaper plays again. */
@@ -2804,18 +2828,40 @@ public class MainActivity extends Activity implements AppAdapter.TileListener {
 
     /** Draws today's times with the next one bold and white, and wakes again when that changes. */
     private void updatePrayerLine() {
-        if (prayerLine == null) return;
+        if (prayerLine == null && prayerTimeline == null) return;
         handler.removeCallbacks(prayerTick);
         LocalTime now = LocalTime.now();
+        LocalDate today = LocalDate.now();
         int minute = now.getHour() * 60 + now.getMinute();
-        Prayer.Line line = Prayer.line(LocalDate.now(), minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
+        Prayer.Line line = Prayer.line(today, minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
         if (line.next != prayerNext || !line.day.equals(prayerDay)) {
             prayerNext = line.next;
             prayerDay = line.day;
-            prayerLine.setText(prayerText(line));
+            CharSequence text = prayerText(line);
+            if (prayerLine != null) prayerLine.setText(text);
+            else prayerTimeline.setContentDescription(text.toString());
         }
+        if (prayerTimeline != null) showTimeline(today, line, minute);
         long delay = ((line.changesAt() - minute) * 60L - now.getSecond()) * 1000L + 500;
         handler.postDelayed(prayerTick, Math.max(1000L, delay));
+    }
+
+    /** prayer_style timeline, from minuteTick: moves the now tick; the prayers' own changes come from prayerTick. */
+    private void updatePrayerTimeline() {
+        if (prayerTimeline == null) return;
+        LocalTime now = LocalTime.now();
+        LocalDate today = LocalDate.now();
+        int minute = now.getHour() * 60 + now.getMinute();
+        showTimeline(today, Prayer.line(today, minute, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat),
+                minute);
+    }
+
+    private void showTimeline(LocalDate today, Prayer.Line line, int minute) {
+        if (!today.equals(timelineDay)) {
+            timelineToday = Prayer.times(today, prayerLat, prayerLon, ZoneId.systemDefault(), prayerIhtiyat);
+            timelineDay = today;
+        }
+        prayerTimeline.show(PrayerTimelineModel.of(timelineToday, line, minute));
     }
 
     private CharSequence prayerText(Prayer.Line line) {

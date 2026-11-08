@@ -299,6 +299,12 @@ final class Config {
     final int wallpaperPauseSeconds;
     /** config.json wallpaper_smooth: the animated wallpaper is drawn with bilinear filtering when scaled up. */
     final boolean wallpaperSmooth;
+    /** prayer_style: "line" (default, the five times as text) or "timeline" (a 24-hour line with five dots). */
+    static final String PRAYER_LINE = "line", PRAYER_TIMELINE = "timeline";
+    final String prayerStyle;
+    /** prayer_glow_color: the glow of the next prayer on the timeline; red by default. */
+    static final int PRAYER_GLOW_DEFAULT = 0xFFFF3B30;
+    final int prayerGlowColor;
     /** Show each rotating wallpaper's name from wallpapers/captions.txt (config.xml / theme wallpaper_captions). */
     final boolean wallpaperCaptions;
     /** Answer VIEW_INPUTS with the Inputs menu (handle_view_inputs); see InputsRequestActivity. */
@@ -349,8 +355,11 @@ final class Config {
                    float focusScale, float unfocusedOpacity, String headerPosition, int clockSize, boolean prayerTimes,
                    double latitude, double longitude, int prayerIhtiyat, int topButtonSize, boolean headerShadow,
                    int rowsAutohideSeconds, boolean rowWrap, boolean downOpensLibrary, File wallpaperAnimated,
-                   int wallpaperPauseSeconds, boolean wallpaperSmooth) {
+                   int wallpaperPauseSeconds, boolean wallpaperSmooth, String prayerStyle, int prayerGlowColor) {
         this.font = font;
+        this.prayerStyle = PRAYER_TIMELINE.equalsIgnoreCase(prayerStyle == null ? "" : prayerStyle.trim())
+                ? PRAYER_TIMELINE : PRAYER_LINE;
+        this.prayerGlowColor = prayerGlowColor;
         this.wallpaperSmooth = wallpaperSmooth;
         this.wallpaperPauseSeconds = wallpaperPauseSeconds;
         this.wallpaperAnimated = wallpaperAnimated;
@@ -638,6 +647,8 @@ final class Config {
         boolean wallpaperAnimatedOn = false;
         int wallpaperPauseSeconds = 0;
         boolean wallpaperSmooth = false;
+        String prayerStyle = PRAYER_LINE;
+        int prayerGlowColor = PRAYER_GLOW_DEFAULT;
         boolean applied = false;
 
         File dir = dir(ctx);
@@ -776,6 +787,8 @@ final class Config {
             wallpaperPauseSeconds = WallpaperPause.seconds(
                     integer(json, "wallpaper_pause_seconds", wallpaperPauseSeconds, 0, 86_400));
             wallpaperSmooth = bool(json, "wallpaper_smooth", wallpaperSmooth);
+            prayerStyle = string(json, "prayer_style", prayerStyle);
+            prayerGlowColor = color(json, "prayer_glow_color", prayerGlowColor);
         }
         // A top-bar app is moved there, not copied: it leaves the grid.
         for (String pkg : topBarApps) if (!hidden.contains(pkg)) hidden.add(pkg);
@@ -844,7 +857,7 @@ final class Config {
                 headerPosition, clockSize, prayerTimes, latitude, longitude, prayerIhtiyat,
                 topButtonSize, headerShadow, rowsAutohideSeconds, rowWrap, downOpensLibrary && library,
                 animatedWallpaper(dir, wallpaperAnimatedOn && wallpaperEnabled), wallpaperPauseSeconds,
-                wallpaperSmooth);
+                wallpaperSmooth, prayerStyle, prayerGlowColor);
     }
 
     /** A theme font's file name as ThemeFiles takes it, or "" for a name the launcher would never find. */
