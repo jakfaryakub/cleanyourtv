@@ -22,6 +22,72 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps, pause after 300 s, `wallpaper_dim` 25 |
 | 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
+| 4c | Smooth animated wallpaper: `wallpaper_smooth` (bilinear instead of 3 px blocks), and an 800×450 variant | proposed, see "Before Phase 3" |
+| 1b.7 | Prayer times as a 24-hour timeline: `prayer_style: "timeline"` (default `"line"`), `prayer_glow_color` | proposed, mock-ups for a choice |
+
+## Before Phase 3
+
+Three things checked or planned on 2026-11-08 before the theme picker.
+
+**0. Typing from the phone (read-only, T6C).** `com.google.android.tv.remote.service` 7.00.999235495 (an update over
+the system 6.0) is installed and enabled for user 0, and is not in `pm list packages -d`. Its `DiscoveryService`,
+`RemoteService`, `AtvRemoteProviderService` and `AtvSearchAssistantService` are running. The T6C list keeps it on
+purpose, with katniss, for the mic button. Gboard and TCL's keyboard are both enabled. Nothing to re-enable: the
+Google TV / Google Home app on the same Wi-Fi pairs with a code shown on the TV, and its keyboard types into the
+focused text field.
+
+**A. The animated wallpaper looks blocky.** `WallpaperPlayer` gives the `ImageView` (`CENTER_CROP`) an
+`AnimatedImageDrawable` at its decoded size, 640×360, so the view scales it 3×. HWUI draws it through Skia's
+`SkAnimatedImage`. When the decode size equals the drawable's size (the "simple" path), the frame is drawn with no
+paint: nearest-neighbour under the view's scale, hence the 3 px squares. `wallpaper_dim`'s colour filter only goes on
+the save-layer's paint, not on the frame's sampling, and no `setFilterBitmap` reaches the native draw.
+
+- **Proposed key `wallpaper_smooth`** (bool, off by default). In `Api28.decode`, ask `setTargetSize` for the screen
+  size instead of `decodeSize` when the file is smaller. libwebp only scales down, so for an upscale Skia keeps
+  decoding at the file's own size and adds a matrix, and a frame with a matrix is drawn with low (bilinear)
+  filtering. Expected cost: no extra buffers (frames stay 640×360, PSS unchanged), one bilinear full-screen quad on the
+  GPU per frame, about 0 ms. A pure helper beside `AnimatedWallpaper.decodeSize`, unit tested. To be proven on the TV.
+  If Skia still samples nearest, the fallback draws each frame into a 640×360 bitmap and blits it with
+  `Paint.FILTER_BITMAP`, at one copy per frame.
+- **800×450 variant**, made from the same clip and window as B2 (4.80 s, 6.13 s, 12 fps, q70, `-kmax 5`): 74 frames,
+  2,143,868 B, under the 3 MB limit (`tools/webp_wallpaper.py --check`). B2 is 1,417,980 B. Expected: PSS about +1 MB
+  over B2 (two 1.44 MB frames instead of two 0.92 MB) and idle CPU about 30% of a core, against B2's 20.4%. That would
+  miss the survey's 20% CPU limit even if PSS and jank pass.
+- **Local simulation** (`shots/a-crop-sim.png`, not committed): frame 26 of each file (the one in the 4a dim 25
+  screenshot), scaled to 1920×1080, darkened 25%, cropped at both irises and zoomed 2×. Nearest at 640×360 shows the
+  staircase on the lashes and square sparkles. Bilinear at 640×360 removes them, and 800×450 bilinear adds a little
+  detail in the lashes over that. So the filter does most of the work and costs nothing; 800×450 is a small step for
+  about 50% more CPU.
+- **Test on the TV** once the code is written:
+  1. Build with `wallpaper_smooth`: APK under 640 KB, lint 0.
+  2. With `wallpaper_pause_seconds` 30 so a frame holds, screenshots of 640×360 without the key, 640×360 with it,
+     and 800×450 with it. Crop the eye under the clock and the left iris side by side, as in the simulation.
+  3. After a clean boot, `tools/bench-home.sh` in the order A (640×360, no filter), B (640×360 smooth), C (800×450
+     smooth), 90 s after each push, `SKIP_GATE=1` and `down_opens_library` off as in 4a part 2, plus 60 s idle CPU
+     (`top`) and 30 s idle frames. Pass against A: PSS at most +8 MB, janky frames at most +2 pp.
+
+**B. Prayer times as a 24-hour timeline** (`prayer_style`: `"line"` by default, `"timeline"`; `prayer_glow_color`,
+default `#FF3B30`).
+
+- A new `PrayerTimeline` view with only an `onDraw`, no bitmap: a thin line for 00:00-24:00 under the date, from the
+  date's left edge to the buttons' right edge (570 px on the T6C), faint ticks at 0, 6, 12, 18 and 24 h, five dots at
+  `minute / 1440` of the width, and a short upright "now" tick. The line up to now is a little brighter.
+- Passed prayers: dots at about 40% opacity. The next one: a dot in `prayer_glow_color` with a soft glow, drawn as
+  three larger dots at falling alpha (or a `RadialGradient` made once in `onSizeChanged`), not `setShadowLayer`,
+  which would need a software layer.
+- Update: `minuteTick` calls `timeline.setNow(minute)`, which invalidates the view. The existing `prayerTick` still
+  recomputes the times at a prayer or midnight. No new timer.
+- After Isha: `Prayer.line` already returns tomorrow with Fajr as next. The timeline keeps today's times (one more
+  `Prayer` computation, cached per day) and draws all five dimmed. The glow sits on the Fajr dot, as tomorrow's Fajr
+  is within a minute of today's, the same pixel, and its label shows tomorrow's time. The now tick sits past Isha.
+- Variants (`shots/b-timeline-*.png`, the 4a dim 25 screenshot with the old line and clock painted over; not
+  committed):
+  1. Name and time under every dot. Maghrib and Isha are 72 minutes apart, 28 px at this width, so their labels
+     collide and one goes to a second row. Small dim labels are hard to read over the bright eye.
+  2. Only the next prayer is labelled ("Asr 14:59", bold), under its red dot; the other dots are bare.
+- Cost estimate: one view, about 10 draw calls (line, ticks, five dots, glow, now tick, one to six labels), redrawn
+  once a minute: well under 0.5 ms on the UI thread and a few KB. Measured with an A/B like 1b.5 once it is coded.
+- Tests: a pure `TimelineModel` (x positions, passed and next flags, the after-Isha case) beside `PrayerTest`.
 
 ## Phase 1b.1 result
 
