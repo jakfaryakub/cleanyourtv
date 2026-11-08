@@ -85,3 +85,7 @@ rule sit on its wanted list until a screenshot arrives.
 | `top_button_size` | <img src="switches/header_position.jpg" width="320" alt="top_button_size 34 on a TV: the Wi-Fi and Settings buttons smaller beside the clock"> |
 | `header_shadow` | <img src="switches/header_position.jpg" width="320" alt="header_shadow on a TV: the clock, the date and the prayer line with a soft dark shadow over the wallpaper"> |
 | `rows_autohide_seconds` | <img src="switches/rows_autohide_seconds.jpg" width="320" alt="rows_autohide_seconds 30 on a TV: Home after 30 idle seconds, the app row gone, the clock, date and prayer times still at the top right"> |
+| `row_wrap` | <img src="switches/row_wrap.jpg" width="320" alt="row_wrap on a TV: Left from Media Player, the first tile, put focus on Weather, the last tile of the row"> |
+| `down_opens_library` | <img src="switches/down_opens_library.jpg" width="320" alt="down_opens_library on a TV: Down from the only row opened the App library over Home"> |
+| `wallpaper_animated` | <img src="switches/wallpaper_animated.jpg" width="320" alt="wallpaper_animated on a TV: a moving gradient test clip as Home's wallpaper behind the clock, the prayer line and the app row"> |
+| `wallpaper_pause_seconds` | <img src="switches/wallpaper_animated.jpg" width="320" alt="wallpaper_pause_seconds on a TV: the animated wallpaper, which holds on its frame after that many seconds with no key"> |
