@@ -18,14 +18,59 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | done |
 | 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
-| 3 | Theme picker on the TV, with the remote | surveyed (below), picker variant A; code next (remember `recreate()`) |
+| 3 | Theme picker on the TV, with the remote | done: slots, `theme.sh --slot/--use/--list/--delete`, picker variant A; a `recreate()` leak found and fixed |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps, pause after 300 s, `wallpaper_dim` 25 |
 | 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
 | 4c | Smooth animated wallpaper: `wallpaper_smooth` (bilinear instead of 3 px blocks) | done; 800×450 not taken |
 | 1b.7 | Prayer times as a 24-hour timeline: `prayer_style: "timeline"` (default `"line"`), `prayer_glow_color` | done, variant 2 (label on the next prayer only) |
 
-## Phase 3 survey
+## Phase 3 result
+
+Seven commits as the survey planned, plus one for a leak the TV test found. Checked on the T6C (Android 12) with two
+slots made from `work/theme-ref`: purple-eyes ("Purple Eyes", animated, 1.9 MB on the TV) and red-eyes ("Red Eyes",
+the static `wallpaper-before.jpg`, no webp, 0.4 MB). APK 611,737 B (+8.3 KB), lint 0 errors.
+
+Different from the survey: no `theme_switch` flag. Launcher settings already bumps `settings_revision`, and
+`MainActivity.onResume` already calls `recreate()` when it moved, so the picker writes `active_theme`, returns
+RESULT_OK, settings calls `changed()` and finishes. `theme.ps1` also gained the `wallpaper.webp` push it never had.
+
+**On the TV.**
+- `--slot` for both, `--list` shows them with names, sizes, animated or static, and the legacy root theme.
+- A switch with the real remote (Launcher settings, Down 4×, OK, Left, OK): Red Eyes on Home with its font, logos
+  and prayer timeline. The picker's focus starts on the theme in use; Left and Right stop at both ends, Up and Down
+  stay in the row.
+- 10 switches through the picker with injected keys: 190-370 ms from OK to Home's `onResume` (events log).
+- A slot whose `config.json` does not parse: `--use` refuses it; with `active_theme` written by hand Home falls back
+  to the legacy theme and `--list` says so. A slot without its font: Red Eyes in Outfit, logged by `ThemeFont`.
+- Legacy and Reset to built-in from the picker; a reboot keeps the slot; a plain `theme.sh <folder>` still pushes and
+  takes the TV off the slot.
+
+**The leak.** After 10 switches from a clean boot PSS went from 42,610 KB to 75,028 KB and settled there, with 11
+activities alive. A Launcher settings change that only recreates Home (the clock format) did the same, so it was old.
+A heap dump from a debug build (same debug key, installed over the release one and back) showed two holders of
+every destroyed `MainActivity`:
+1. the `ConnectivityManager` taken from the activity keeps it as `mContext`, and its callback handler is held as a
+   JNI global by the system;
+2. the glass focus listener on the decor view's `ViewTreeObserver`: `recreate()` keeps the window and its decor
+   view, so each Home added one more listener and none was removed.
+The fix (`170bf3f2`) takes the manager from the application and removes the listener in `onDestroy`. A second dump
+showed no destroyed activity reachable from a root.
+
+After a clean boot (unplugged), release APK, purple-eyes, 60-90 s idle between steps:
+
+| Step | PSS | Activities |
+|---|---|---|
+| Home, after a few keys | 32,243 KB | 1 |
+| After 10 theme switches | 45,748 KB | 1 |
+| After 10 clock-format changes more | 44,887 KB | 1 |
+| After 10 theme switches more | 48,969 KB | 1 |
+
+Activities go back to 1 after every round (2-5 for a few seconds, until a GC). PSS is flat across 30 recreates, but
+it sits 13-17 MB above the first reading, which was taken on a cold Home: that misses the survey's +8 MB against it.
+The 4c A run after warm-up was 50,402 KB on the same theme, so the plateau is a warm Home rather than a leak; a warm
+baseline (after one switch) is the fairer start next time.
+
 
 Read-only survey on 2026-11-08, no build and no TV. Goal: several themes kept on the TV (for example "Purple Eyes",
 animated, the current one, and "Red Eyes", static, the one before) and switched with the remote, no laptop.

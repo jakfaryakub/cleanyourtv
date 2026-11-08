@@ -224,6 +224,29 @@ A new key needs one there in the same pull request.
 | `glow_snap` | bool | The ambient glow takes the next app's colour in one frame instead of dimming and fading back in. Each frame of the fade repaints the whole screen, so on a slow GPU (a Mali-G52 on a Xiaomi MiTV-MOEU0) it cut the late frames on Home from 60% to 27%. `false` by default |
 | `app_glow` | bool | The focus highlight glows in the focused app's colour on every tile, as `cinematic_home` does for the dock (`false` by default) |
 | `fade_rows` | bool | The rows fade out as they scroll up under the clock instead of being cut off at a hard line; the wallpaper or sky shows through. The grid then draws into a hardware layer (about 6 MB of graphics memory at 1080p) (`false` by default) |
+| `theme_name` | string | The theme's name in the Theme picker of Launcher settings (see [Several themes on one TV](#several-themes-on-one-tv)), at most 40 characters; the slot's name when unset. It changes nothing on Home |
+
+## Several themes on one TV
+
+A TV can keep up to 8 themes, each in its own slot, and switch between them with the remote: Launcher settings,
+Theme, then Left or Right and OK. The picker shows each slot as a card with its wallpaper, its `theme_name`, and
+whether it is animated; a card for the theme pushed without `--slot` (Legacy) when there is one, and Reset to
+built-in for `config.xml`. Home restarts with the new font, scale and language. Only the theme in use is loaded.
+
+```bash
+TV_HOST=192.168.1.50 tools/theme.sh --slot aurora themes/aurora   # keep a theme on the TV, without switching to it
+TV_HOST=192.168.1.50 tools/theme.sh --list                         # the themes on the TV, their size, the one in use
+TV_HOST=192.168.1.50 tools/theme.sh --use aurora                   # switch: a slot, legacy, or builtin
+TV_HOST=192.168.1.50 tools/theme.sh --delete aurora                # remove a slot that is not in use
+```
+
+A slot name is lower-case letters, digits and `-`, at most 32. `--slot` sends the same files as a plain push
+(wallpapers, `wallpaper.webp`, the named font, `icons/`) and refuses, before anything is sent, a 9th slot, a theme
+over 8 MB, slots over 40 MB in all, or a TV with less free space than twice the theme. A plain push and `--reset`
+leave the slots alone and switch the TV back to the pushed theme or `config.xml`. A slot whose `config.json` no
+longer parses falls back to the pushed theme, or to `config.xml`. Switching themes clears the on-TV choices
+(columns, wallpaper pick, dock opacity, clock), as a push does. On Windows: `theme.ps1 -Slot`, `-List`, `-Use`,
+`-Delete`.
 
 ## Wallpapers
 

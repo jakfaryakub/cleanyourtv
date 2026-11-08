@@ -92,3 +92,4 @@ rule sit on its wanted list until a screenshot arrives.
 | `wallpaper_smooth` | <img src="switches/wallpaper_smooth.jpg" width="320" alt="wallpaper_smooth on a TV: the same 640x360 animated wallpaper frame in 3 px blocks without the key and smooth with it, an eye cropped from two screenshots and zoomed"> |
 | `prayer_style` | <img src="switches/prayer_style.jpg" width="320" alt="prayer_style timeline on a TV: a thin 24-hour line under the date, Fajr, Dhuhr and Asr dimmed, the now tick, Maghrib glowing red with Maghrib 17:51 under it, Isha after it"> |
 | `prayer_glow_color` | <img src="switches/prayer_style.jpg" width="320" alt="prayer_glow_color on a TV: the default red glow on Maghrib, the next prayer on the timeline"> |
+| `theme_name` | <img src="switches/theme_name.jpg" width="320" alt="theme_name on a TV: the Theme picker in Launcher settings, a row of cards named Aurora (in use, focused) and Ruska with their wallpapers, and Reset to built-in"> |
