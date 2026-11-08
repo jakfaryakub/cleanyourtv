@@ -512,9 +512,24 @@ final class Config {
         return GLASS_HALO.equalsIgnoreCase(v) ? GLASS_HALO : GLASS_DEFAULT;
     }
 
-    /** The folder the theme tools push into; null when external storage is unavailable. */
-    static File dir(Context ctx) {
+    /** The folder the theme tools push into (the root theme, active_theme, themes/); null when unavailable. */
+    static File root(Context ctx) {
         return ctx.getExternalFilesDir(null);
+    }
+
+    /**
+     * The theme in use: a slot (themes/<slug>), the root theme, or null for the built-in config.xml, as active_theme
+     * says (ThemeSlots.resolve); null too when external storage is unavailable. Every theme file is read from here.
+     */
+    static File dir(Context ctx) {
+        File root = root(ctx);
+        if (root == null) return null;
+        String pointer = ThemeSlots.pointer(new File(root, ThemeFiles.ACTIVE));
+        if (pointer == null) return root;
+        File slots = new File(root, ThemeFiles.THEMES);
+        String resolved = ThemeSlots.resolve(pointer, new File(root, FILE_NAME).isFile(),
+                slug -> read(new File(new File(slots, slug), FILE_NAME)) != null);
+        return ThemeSlots.folder(root, resolved);
     }
 
     static Config load(Context ctx) {
@@ -796,7 +811,7 @@ final class Config {
         // current theme without clearing choices from an older launcher version.
         SharedPreferences choices = ctx.getSharedPreferences(SETTINGS_NAME, Context.MODE_PRIVATE);
         // Unmounted storage looks like a theme reset; compare only once the file is readable.
-        if (mounted) syncThemeChoices(choices, dir, file);
+        if (mounted) syncThemeChoices(choices, root(ctx), file);
         int chosenColumns = choices.getInt("columns", columns);
         if (chosenColumns >= 4 && chosenColumns <= 7) columns = chosenColumns;
         int chosenRows = choices.getInt(ROWS_BELOW_DOCK_KEY, rowsBelow);
