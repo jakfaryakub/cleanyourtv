@@ -55,18 +55,19 @@
     <string name="dock_opacity_label">Dock band opacity</string>
     <string name="wallpaper_label">Wallpaper</string>
     <string name="wallpaper_state">Wallpaper: %1$s</string>
-    <string name="theme_label">Theme</string>
-    <string name="theme_state">Theme: %1$s</string>
-    <string name="theme_in_use">In use</string>
-    <string name="theme_animated">Animated · %1$s</string>
-    <string name="theme_static">Static · %1$s</string>
-    <string name="theme_legacy">Legacy</string>
-    <string name="theme_builtin">Reset to built-in</string>
-    <string name="theme_builtin_name">Built-in</string>
-    <string name="theme_builtin_detail">The launcher\'s own look</string>
-    <string name="theme_broken">Can\'t read this theme</string>
-    <string name="theme_hint">Left and Right to choose, OK to apply, Back to cancel</string>
-    <string name="theme_failed">Couldn\'t switch the theme</string>
+    <!-- The Theme picker (docs/PLAN.md, Phase 3): English only in this fork for now. -->
+    <string name="theme_label" translatable="false">Theme</string>
+    <string name="theme_state" translatable="false">Theme: %1$s</string>
+    <string name="theme_in_use" translatable="false">In use</string>
+    <string name="theme_animated" translatable="false">Animated · %1$s</string>
+    <string name="theme_static" translatable="false">Static · %1$s</string>
+    <string name="theme_legacy" translatable="false">Legacy</string>
+    <string name="theme_builtin" translatable="false">Reset to built-in</string>
+    <string name="theme_builtin_name" translatable="false">Built-in</string>
+    <string name="theme_builtin_detail" translatable="false">The launcher\'s own look</string>
+    <string name="theme_broken" translatable="false">Can\'t read this theme</string>
+    <string name="theme_hint" translatable="false">Left and Right to choose, OK to apply, Back to cancel</string>
+    <string name="theme_failed" translatable="false">Couldn\'t switch the theme</string>
     <string name="wallpaper_none">None</string>
     <string name="wallpaper_applied">Wallpaper changed</string>
     <string name="wallpaper_theme_default">Theme default</string>
