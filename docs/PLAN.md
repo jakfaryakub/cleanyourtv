@@ -18,12 +18,118 @@ most 8 MB, and janky frames may differ by at most 2 percentage points.
 | 1b.3 | App row hidden while idle, shown on the first key press: `rows_autohide_seconds` | done |
 | 1b.6 | Polish: `row_wrap`, `down_opens_library`, Left from the App library pill, logos for system apps (`tools/logo.py --icon`) | done |
 | 2 | Tile size, gaps and label size as theme keys | parked: `tile_style` logo and `focus_scale` covered the need |
-| 3 | Theme picker on the TV, with the remote | next (remember `recreate()`, below) |
+| 3 | Theme picker on the TV, with the remote | surveyed (below), picker variant A; code next (remember `recreate()`) |
 | 4a | Animated WebP wallpaper (`AnimatedImageDrawable`), key `wallpaper_animated`; measure first | done: 640×360 at 12 fps, pause after 300 s, `wallpaper_dim` 25 |
 | 4a.1 | Pause the animation after N seconds with no key: `wallpaper_pause_seconds` | done; the experiment theme uses 300 |
 | 4b | MP4 wallpaper, only if 4a fails and only in this fork (breaks the repo's "no video" rule) | not needed for now: 4a passes at 640×360 |
 | 4c | Smooth animated wallpaper: `wallpaper_smooth` (bilinear instead of 3 px blocks) | done; 800×450 not taken |
 | 1b.7 | Prayer times as a 24-hour timeline: `prayer_style: "timeline"` (default `"line"`), `prayer_glow_color` | done, variant 2 (label on the next prayer only) |
+
+## Phase 3 survey
+
+Read-only survey on 2026-11-08, no build and no TV. Goal: several themes kept on the TV (for example "Purple Eyes",
+animated, the current one, and "Red Eyes", static, the one before) and switched with the remote, no laptop.
+
+**1. Today: one theme in `Config.dir`.**
+- `Config.dir(ctx)` is `getExternalFilesDir(null)` (`/sdcard/Android/data/com.gathin.tvhome/files`). Every reader
+  goes through it: `Config.load` (config.json, wallpaper.jpg, `wallpapers/`), `Config.animatedWallpaper`
+  (wallpaper.webp), `ThemeFont` (`fonts/`), `AppAdapter` (`icons/`), `LauncherSettingsActivity.showWallpaperPicker`
+  and `ThemeProvider`.
+- `ThemeFiles.path` allows the root names config.json, wallpaper.jpg, wallpaper.webp and theme_revision, plus files
+  in `wallpapers/`, `fonts/` and `icons/`; `ThemeProvider` writes and deletes only those, for callers holding
+  WRITE_SECURE_SETTINGS.
+- `tools/theme.sh <folder>` stages each file in /data/local/tmp and writes it through the provider (cp as fallback),
+  deletes the files the theme lacks, empties `wallpapers/`, `fonts/` and `icons/` before refilling them, pushes only
+  the font config.json names, writes a fresh `theme_revision` and restarts Home (`theme_restart.py`).
+  `Config.syncThemeChoices` sees the new config stamp and revision and clears the on-TV choices. `readOverlay` keeps a
+  copy of config.json in `getFilesDir()` for a boot before storage mounts.
+- So a switch today is a full push from a laptop.
+
+**2. Storage on the TV.**
+- Layout: `files/themes/<slug>/` holds a whole theme (config.json, wallpaper.jpg, wallpaper.webp, `wallpapers/`,
+  `fonts/`, `icons/`), and `files/active_theme` names the one in use (ASCII, at most 33 B). A switch copies nothing,
+  it only rewrites the pointer. The root files stay as the "legacy" theme, so today's push keeps working.
+- `active_theme` holds a slug, `legacy` or `builtin` (both reserved, never valid slugs). A pure, unit-tested
+  `ThemeSlots.resolve(root, pointer)`:
+  - `builtin`: null, the built-in config.xml, even when root has a config.json;
+  - `legacy`: root if it has a config.json, else null;
+  - a valid slug whose `themes/<slug>/config.json` is readable (at most 64 KB, parses): that folder;
+  - anything else (no pointer, a bad slug, a broken slot): root if it has a config.json, else null.
+  Tests cover each value, a broken slot and an absent root.
+- `Config.dir` returns the resolved folder, so wallpaper.webp, the fonts, the logos and every key
+  (`wallpaper_animated`, `wallpaper_smooth`, `wallpaper_pause_seconds`, `prayer_style`, `prayer_glow_color` and the
+  rest) follow the theme with no change to their readers. A new `Config.root(ctx)` serves the provider, the pointer
+  and `theme_revision`.
+- A missing asset inside a valid theme (a font named but absent, a webp over 3 MB) already falls back per asset; the
+  rest of the theme still applies.
+- Slug: `[a-z0-9][a-z0-9-]{0,31}`. `ThemeFiles.path` accepts `themes/<slug>/` followed by today's rules, and
+  `active_theme`; anything else is refused. `ThemeProvider` adds a canonical-path check (`getCanonicalPath` starts
+  with the root plus "/") as a second guard, and a delete of `themes/<slug>` removes only allowed files, then the
+  empty folders.
+- Display name: an optional config.json key `theme_name` (at most 40 characters), else the slug.
+- Limits, refused by theme.sh before anything is sent: 8 themes, 8 MB per theme, 40 MB in all, and free space
+  (`df`) at least twice the theme. Sizes today:
+
+  | Theme | Files | Size |
+  |---|---|---|
+  | Purple Eyes (`work/theme-ref`) | wallpaper.webp 1,417,980 + wallpaper.jpg 194,370 + plus-jakarta-sans.ttf 176,288 + 10 logos about 203 KB + config.json | about 2.0 MB |
+  | Red Eyes (static, the same without the webp) | | about 0.6 MB |
+  | Largest repo theme, `nature-calm` | | 3.2 MB |
+  | Worst case | 3 MB webp + jpg + a collection + inter.ttf 876,576 | about 6 MB |
+
+- A switch clears the on-TV choices (columns, wallpaper pick, dock opacity, clock format): `syncThemeChoices` sees
+  another config stamp. Accepted for now, see the backlog.
+
+**3. `tools/theme.sh` and `theme.ps1`.**
+- Unchanged: `theme.sh <folder>` pushes into the root (legacy) and removes `active_theme`, so the pushed theme shows;
+  `--reset` clears the root and the pointer, and keeps the slots.
+- New, one form per call, refused with exit 2 before anything is sent, as today:
+  - `--slot <slug> <folder>`: push into `themes/<slug>/`, without switching to it;
+  - `--use <slug|legacy|builtin>`: write the pointer and restart Home;
+  - `--list`: slug, name, size and which is active, through a provider `query` on
+    `content://com.gathin.tvhome.theme/themes`, since the shell cannot list Android/data on the TCL G07;
+  - `--delete <slug>`: refused for the active slug.
+- Tests beside `tests/test_theme_*.py` against the fake TV: the argument forms, slug refusals, the limits, the list.
+
+**4. The picker, variant A.** Three mock-ups were rendered locally: A, one row of large cards like Home's app row; B,
+a vertical list with small thumbnails and a large preview; C, a 3-column grid. A was chosen.
+- Launcher settings gets a "Theme: <name>" row that opens `ThemePickerActivity`: one horizontal row of 16:9 cards.
+  The focused card scales up, the others are dimmed; under each card its name, an "active" tag, and "animated" or
+  "static" with its size. A "Legacy" card shows only when the root has a config.json, and the last card is
+  "Reset to built-in", which writes `builtin`. Left and Right move, OK applies, Back cancels. Focus starts on the
+  active theme; the row scrolls past 4-5 cards.
+- Thumbnails: wallpaper.jpg decoded once with `inSampleSize` (reuse `ThemeIcons.sampleSize`) to 320×180 and kept as a
+  JPEG (q80) in `getCacheDir()/theme-thumbs/<slug>-<length>-<mtime>.jpg`, about 10-15 KB. A theme with only a webp
+  uses its first frame; one with neither gets a flat card with its name. Decoded off the UI thread, one at a time.
+- Apply: write `active_theme`, bump `settings_revision` and set a new `theme_switch` flag. `MainActivity.onResume`
+  sees the flag and calls `recreate()` instead of the rebuild, as "Phase 3 must `recreate()`" (below) requires for
+  `font`, `font_scale` and the locale. Settings and the picker finish first.
+- Strings in English only, no translations (MissingTranslation is informational in `lint.xml`).
+
+**5. Cost and the TV test.**
+- Memory: only the active theme is loaded, as now. With the picker open, at most 8 × 320×180×4 B, about 1.8 MB of
+  thumbnails, freed when it closes. The old theme's `AnimatedImageDrawable` goes with the recreated activity; the PSS
+  check below makes sure it does.
+- Switch time: one Home recreate (font, jpg, first webp frame), estimated 0.5-1.5 s; measure with logcat's
+  `Displayed` line.
+- APK 603,389 B today; the picker is estimated at +8-12 KB, gate 655,360 B.
+- On the TV:
+  1. Push Purple Eyes and Red Eyes with `--slot`; check `--list`.
+  2. Switch 5 times each way from the real remote; D-pad from every edge in the picker; screenshots of the picker and
+     both Homes.
+  3. PSS after warm-up before and after 10 switches: at most +8 MB.
+  4. A slot with a broken config.json and one with a missing font: fallback as above.
+  5. A reboot keeps the active theme; `--use builtin` and `--reset` give config.xml; a plain `theme.sh <folder>` still
+     works.
+
+**6. Commits, safest first.**
+1. `Launcher: ThemeFiles accepts themes/<slug>/ paths and active_theme`, with unit tests; no behaviour change.
+2. `Launcher: ThemeSlots.resolve and Config.root, Config.dir follows active_theme with fallback`, with tests.
+3. `Launcher: ThemeProvider writes and deletes theme slots, lists them, canonical-path guard`.
+4. `tools: theme.sh and theme.ps1 --slot, --use, --list, --delete, with size limits`, with tests.
+5. `Launcher: theme thumbnails cached once per wallpaper`, with a sizing test.
+6. `Launcher: theme picker in Launcher settings, recreate() Home on a switch`.
+7. `docs: Phase 3 result, theme slots in themes/README.md and switches.md`.
 
 ## Phase 4c and 1b.7 result
 
@@ -590,6 +696,10 @@ same theme in Outfit gave:
 - The clock screensaver keeps its own text sizes on purpose.
 
 ## Backlog
+
+- **On-TV choices per theme.** Keep columns, the wallpaper pick, dock opacity and clock format for each theme, so a
+  Phase 3 switch does not clear them (for example preferences keyed by the slug, instead of the reset in
+  `Config.syncThemeChoices`). Noted only.
 
 - **ClockDream about 20% CPU while the screensaver shows.** Measured in Phase 4a.1: the launcher process kept
   about 20% of one core with `ClockDream` up and Home `STOPPED`, so it is the dream, not the wallpaper. Not
