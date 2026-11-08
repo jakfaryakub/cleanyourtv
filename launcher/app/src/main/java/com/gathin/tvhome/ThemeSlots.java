@@ -2,6 +2,7 @@ package com.gathin.tvhome;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -151,5 +152,32 @@ final class ThemeSlots {
     static String active(File root, File dir) {
         if (dir == null) return ThemeFiles.BUILTIN;
         return dir.equals(root) ? ThemeFiles.LEGACY : dir.getName();
+    }
+
+    /**
+     * Points active_theme at a slot, LEGACY or BUILTIN: written to a temporary file and renamed over the old one, so
+     * a power cut never leaves half a slug. False when the value is not one of those or the file cannot be written.
+     */
+    static boolean write(File root, String id) {
+        if (root == null || id == null) return false;
+        if (!ThemeFiles.slug(id) && !ThemeFiles.LEGACY.equals(id) && !ThemeFiles.BUILTIN.equals(id)) return false;
+        File tmp = new File(root, ThemeFiles.ACTIVE + ".tmp");
+        try (FileOutputStream out = new FileOutputStream(tmp)) {
+            out.write(id.getBytes(StandardCharsets.US_ASCII));
+            out.getFD().sync();
+        } catch (Exception e) {
+            //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+            return false;
+        }
+        File target = new File(root, ThemeFiles.ACTIVE);
+        if (tmp.renameTo(target)) return true;
+        // A pointer the shell wrote (theme.sh's cp fallback) may refuse the rename; remove it and try once more.
+        //noinspection ResultOfMethodCallIgnored
+        target.delete();
+        boolean ok = tmp.renameTo(target);
+        if (!ok) //noinspection ResultOfMethodCallIgnored
+            tmp.delete();
+        return ok;
     }
 }

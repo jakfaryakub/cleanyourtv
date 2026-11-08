@@ -103,4 +103,18 @@ public class ThemeSlotsTest {
         Files.createSymbolicLink(link.toPath(), outside.toPath());
         assertFalse(ThemeFiles.inside(root, new File(root, "themes/a/config.json")));
     }
+
+    @Test public void writingThePointer() throws IOException {
+        File root = Files.createTempDirectory("root").toFile();
+        assertTrue(ThemeSlots.write(root, "red-eyes"));
+        assertEquals("red-eyes", ThemeSlots.pointer(new File(root, "active_theme")));
+        assertTrue(ThemeSlots.write(root, "builtin"));
+        assertEquals("builtin", ThemeSlots.pointer(new File(root, "active_theme")));
+        assertTrue(ThemeSlots.write(root, "legacy"));
+        assertFalse(ThemeSlots.write(root, "../x"));
+        assertFalse(ThemeSlots.write(root, "Red"));
+        assertFalse(ThemeSlots.write(null, "red-eyes"));
+        assertEquals("legacy", ThemeSlots.pointer(new File(root, "active_theme")));
+        assertFalse(new File(root, "active_theme.tmp").exists());
+    }
 }

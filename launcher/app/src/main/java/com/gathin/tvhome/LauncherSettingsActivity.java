@@ -34,6 +34,8 @@ public final class LauncherSettingsActivity extends Activity {
     private final TextView[] dockChoices = new TextView[DOCK_OPACITIES.length];
     private static final String[] CLOCK_FORMATS = {"system", "12", "24"};
     private final TextView[] clockChoices = new TextView[CLOCK_FORMATS.length];
+    private static final int THEME_PICKER_REQUEST = 1;
+    private TextView themeChoice;
     private TextView wallpaperChoice;
     private TextView animationsChoice;
     private TextView advancedChoice;
@@ -123,6 +125,14 @@ public final class LauncherSettingsActivity extends Activity {
             reverseRow(dockChoices);
             reverseRow(clockChoices);
         }
+        themeChoice = findViewById(R.id.themeChoice);
+        themeChoice.setOnClickListener(v -> {
+            try {
+                startActivityForResult(new Intent(this, ThemePickerActivity.class), THEME_PICKER_REQUEST);
+            } catch (ActivityNotFoundException e) {
+                Toast.makeText(this, R.string.not_available, Toast.LENGTH_LONG).show();
+            }
+        });
         wallpaperChoice = findViewById(R.id.wallpaperChoice);
         wallpaperChoice.setOnClickListener(v -> showWallpaperPicker());
         animationsChoice = findViewById(R.id.animationsChoice);
@@ -285,6 +295,30 @@ public final class LauncherSettingsActivity extends Activity {
                 choices.getLong(Config.SETTINGS_REVISION_KEY, 0) + 1).apply();
     }
 
+    /**
+     * A new theme was chosen: these settings close and Home recreates itself on resume (the revision moved), so
+     * the new font, font_scale and language take effect; the choices below belong to the old theme anyway.
+     */
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == THEME_PICKER_REQUEST && resultCode == RESULT_OK && data != null
+                && data.getBooleanExtra(ThemePickerActivity.EXTRA_THEME_CHANGED, false)) {
+            changed();
+            finish();
+        }
+    }
+
+    /** The theme in use, by name: a slot's theme_name, Legacy, or Built-in. */
+    private String themeLabel() {
+        File root = Config.root(this);
+        String active = ThemeSlots.active(root, Config.dir(this));
+        if (ThemeFiles.BUILTIN.equals(active)) return getString(R.string.theme_builtin_name);
+        if (ThemeFiles.LEGACY.equals(active)) return getString(R.string.theme_legacy);
+        for (ThemeSlots.Info t : ThemeSlots.list(root)) if (t.id.equals(active)) return t.name;
+        return active;
+    }
+
     private void setAdvanced(boolean enabled) {
         advancedEffects = enabled;
         choices.edit().putBoolean("advanced_effects", enabled).apply();
@@ -311,6 +345,7 @@ public final class LauncherSettingsActivity extends Activity {
                 getString(advancedEffects ? R.string.on : R.string.off)));
         advancedChoice.setEnabled(animations);
         advancedChoice.setAlpha(animations ? 1f : 0.5f);
+        themeChoice.setText(getString(R.string.theme_state, themeLabel()));
         String wallpaperCurrent = choices.getString(Config.WALLPAPER_CHOICE_KEY, null);
         wallpaperChoice.setText(getString(R.string.wallpaper_state,
                 "none".equals(wallpaperCurrent) ? getString(R.string.wallpaper_none)
