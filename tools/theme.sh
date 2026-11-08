@@ -6,7 +6,17 @@
 # Usage: TV_HOST=192.168.1.50 tools/theme.sh themes/aurora
 #        TV_HOST=192.168.1.50 tools/theme.sh --reset        # remove the overlay, back to config.xml
 #
-# One argument, and --reset takes none: a second word is refused rather than dropped (see below). Exit status:
+# Theme slots (docs/PLAN.md, Phase 3): several themes kept on the TV, picked in Launcher settings with the remote.
+#        tools/theme.sh --slot <slug> <theme folder>   # push into themes/<slug>/ on the TV, without switching to it
+#        tools/theme.sh --use <slug|legacy|builtin>    # switch: a slot, the theme pushed without --slot, or config.xml
+#        tools/theme.sh --list                         # the themes on the TV, their size, and the one in use
+#        tools/theme.sh --delete <slug>                # remove a slot (not the one in use)
+# A slug is lower-case letters, digits and '-', at most 32, and not legacy or builtin. Limits for --slot: 8 slots,
+# 8 MB per theme, 40 MB for all slots, and free space on the TV at least twice the theme. A plain push (the first
+# form) also switches the TV back to it, and --reset removes the pointer too; neither touches the slots.
+#
+# One argument, and --reset takes none: a second word is refused rather than dropped (see below); the slot forms
+# take exactly the words shown above. Exit status:
 # 0 the theme is on the TV, or the reset ran; 1 the theme could not be pushed, or Home did not restart after
 # it; 2 the run stopped before the theme was up and nothing was sent - the command line is not one theme folder
 # or --reset (a word that starts with a dash is not a folder name, -h and --help included), the folder has no
@@ -16,6 +26,41 @@
 # one: it answers 2 with the sentence every one of those refusals ends with.
 set -euo pipefail
 THEME_ARG="${1:-}"
+# The slot forms, each with exactly its own words. MODE is push (a folder or --reset, below), slot, use, list or
+# delete; SLOT is the slug or the --use value.
+MODE=push
+SLOT=""
+SLOT_USAGE="usage: theme.sh --slot <slug> <theme folder> | --use <slug|legacy|builtin> | --list | --delete <slug>"
+slug_ok() { [[ "$1" =~ ^[a-z0-9][a-z0-9-]{0,31}$ && "$1" != legacy && "$1" != builtin ]]; }
+case "$THEME_ARG" in
+  --slot|--use|--list|--delete)
+    MODE="${THEME_ARG#--}"
+    case "$MODE" in slot) WANT=3 ;; list) WANT=1 ;; *) WANT=2 ;; esac
+    if [ "$#" -ne "$WANT" ]; then
+      echo "theme.sh $THEME_ARG takes $((WANT - 1)) more word(s). Nothing was sent to the TV." >&2
+      echo "$SLOT_USAGE" >&2
+      exit 2
+    fi
+    SLOT="${2:-}"
+    if [ "$MODE" = use ]; then
+      if [ "$SLOT" != legacy ] && [ "$SLOT" != builtin ] && ! slug_ok "$SLOT"; then
+        echo "theme.sh --use takes a slug, legacy or builtin, so $SLOT is not one. Nothing was sent to the TV." >&2
+        exit 2
+      fi
+    elif [ "$MODE" != list ] && ! slug_ok "$SLOT"; then
+      echo "unsupported slot name: $SLOT (lower-case letters, digits and '-', at most 32, starting with a letter or" \
+        "digit, and not legacy or builtin). Nothing was sent to the TV." >&2
+      exit 2
+    fi
+    if [ "$MODE" = slot ]; then
+      THEME_ARG="$3"
+      case "$THEME_ARG" in -*) echo "theme.sh --slot takes a theme folder after the slug, so $THEME_ARG is not one." \
+        "Nothing was sent to the TV." >&2; exit 2 ;; esac
+    else
+      THEME_ARG=""
+    fi
+    set -- "$THEME_ARG" ;;
+esac
 # A theme folder or --reset, and nothing else. The first word alone decided everything the script did, so
 # `theme.sh --reset themes/aurora` matched the reset branch on that word and threw the folder away: the theme
 # the reader named was removed from the TV instead of pushed, and the run answered "reset" with exit 0 (the
@@ -23,16 +68,18 @@ THEME_ARG="${1:-}"
 # The same line the other way round, `theme.sh themes/aurora --reset`, pushed the theme and ignored the
 # --reset the reader asked for. Both are answered here, before TV_HOST is required and before anything is
 # sent: a command line this script cannot read should not reach a TV.
-if [ -z "$THEME_ARG" ]; then
-  echo "usage: theme.sh <theme folder> | --reset" >&2
-  exit 2
-fi
-if [ "$#" -gt 1 ]; then
-  shift
-  echo "theme.sh takes one argument, a theme folder or --reset: $* would not have been used, and --reset" \
-    "removes the theme from the TV while a folder pushes it, so the two cannot share a command line." \
-    "Nothing was sent to the TV." >&2
-  exit 2
+if [ "$MODE" = push ]; then
+  if [ -z "$THEME_ARG" ]; then
+    echo "usage: theme.sh <theme folder> | --reset" >&2
+    exit 2
+  fi
+  if [ "$#" -gt 1 ]; then
+    shift
+    echo "theme.sh takes one argument, a theme folder or --reset: $* would not have been used, and --reset" \
+      "removes the theme from the TV while a folder pushes it, so the two cannot share a command line." \
+      "Nothing was sent to the TV." >&2
+    exit 2
+  fi
 fi
 # A word that starts with a dash is an option to the reader who types it, and this script has one: --reset.
 # Left to the path below, `--help` (or `--resett`, one letter too many) was resolved against the caller's
@@ -40,7 +87,7 @@ fi
 # the header keeps for a theme that could not be pushed, so a run that sent nothing read as one that had. No
 # folder a theme lives in starts with a dash, and this script sends nothing for a command line it cannot read:
 # answer 2 with the usage, before TV_HOST is required and before anything is sent.
-case "$THEME_ARG" in
+[ "$MODE" = push ] && case "$THEME_ARG" in
   -*) if [ "$THEME_ARG" != "--reset" ]; then
         echo "theme.sh takes a theme folder or --reset, so $THEME_ARG is not a command line it can read." \
           "Nothing was sent to the TV." >&2
@@ -94,6 +141,16 @@ tv() { "$PY" -I tv.py "$@"; }
 # remove our copy first. cp stays as the fallback for firmware without the provider.
 URI=content://$PKG.theme
 TMP=/data/local/tmp/cyt-theme
+# --slot pushes the same files into themes/<slug>/: put, del and the CLEAR_ lines below then aim there, and
+# theme_revision and active_theme stay at the root (ROOT_DIR, ROOT_URI). Nothing makes the slot folder from the
+# shell: the provider creates it with the first file, as it does wallpapers/ (a shell-made folder is EACCES to it).
+ROOT_DIR=$DIR
+ROOT_URI=$URI
+if [ "$MODE" = slot ]; then
+  DIR=$ROOT_DIR/themes/$SLOT
+  URI=$ROOT_URI/themes/$SLOT
+fi
+QUERY="content query --uri $ROOT_URI/themes"
 # A file's staging path; wallpapers/a.jpg is staged as $TMP-wallpapers-a.jpg.
 stage() { echo "$TMP-${1//\//-}"; }
 # Android 8 and 9 have no `content write`: they print the usage and "[ERROR] Unsupported operation: write" but
@@ -118,8 +175,31 @@ CLEAR_FONTS="rm -f $DIR/fonts/*.[tT][tT][fF] $DIR/fonts/*.[oO][tT][fF] 2>/dev/nu
 CLEAR_ICONS="rm -f $DIR/icons/*.[pP][nN][gG] 2>/dev/null; content delete --uri $URI/icons 2>/dev/null"
 CLEAR_WALLPAPERS="rm -f $DIR/wallpapers/*.[jJ][pP][gG] $DIR/wallpapers/*.[jJ][pP][eE][gG] $DIR/wallpapers/*.[pP][nN][gG] $DIR/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $URI/wallpapers 2>/dev/null"
 
+if [ "$MODE" = list ]; then
+  tv "$QUERY" | "$PY" -I theme_slots.py list
+  exit 0
+fi
+if [ "$MODE" = use ]; then
+  if ! WHY=$(tv "$QUERY" | "$PY" -I theme_slots.py use "$SLOT"); then
+    echo "$WHY Nothing was changed on the TV." >&2
+    exit 2
+  fi
+  tv "printf '%s' '$SLOT' > $TMP-active_theme; $(put active_theme)" >/dev/null
+  "$PY" -I theme_restart.py
+  echo "Home now uses $SLOT. Undo with: tools/theme.sh --use <slug|legacy|builtin>"
+  exit 0
+fi
+if [ "$MODE" = delete ]; then
+  if ! WHY=$(tv "$QUERY" | "$PY" -I theme_slots.py delete "$SLOT"); then
+    echo "$WHY Nothing was changed on the TV." >&2
+    exit 2
+  fi
+  tv "content delete --uri $ROOT_URI/themes/$SLOT 2>/dev/null; rm -rf $ROOT_DIR/themes/$SLOT 2>/dev/null" >/dev/null
+  echo "Slot $SLOT is removed from the TV."
+  exit 0
+fi
 if [ "${1:-}" = --reset ]; then
-  tv "mkdir -p $DIR 2>/dev/null; $(del config.json); $(del wallpaper.jpg); $(del wallpaper.webp); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; $CLEAR_ICONS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
+  tv "mkdir -p $DIR 2>/dev/null; $(del active_theme); $(del config.json); $(del wallpaper.jpg); $(del wallpaper.webp); $(del wallpapers/captions.txt); $CLEAR_WALLPAPERS; $CLEAR_FONTS; $CLEAR_ICONS; printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
   "$PY" -I theme_restart.py
   echo reset
   exit 0
@@ -212,7 +292,13 @@ if [ -d "$THEME/icons" ]; then
   done
 fi
 
-tv "mkdir -p $DIR" >/dev/null 2>&1 || true
+if [ "$MODE" = slot ]; then
+  if ! WHY=$( { tv "$QUERY"; echo "--df--"; tv "df -k /sdcard"; } | "$PY" -I theme_slots.py check "$THEME" "$SLOT" "$FONTS"); then
+    echo "$WHY Nothing was sent to the TV." >&2
+    exit 2
+  fi
+fi
+tv "mkdir -p $ROOT_DIR" >/dev/null 2>&1 || true
 tv --push "$THEME/config.json" "$TMP-config.json" >/dev/null
 tv "$(put config.json)"
 if [ -f "$THEME/wallpaper.jpg" ]; then
@@ -250,7 +336,16 @@ if [ -f "$THEME/wallpapers/captions.txt" ]; then
 else
   tv "$(del wallpapers/captions.txt)" >/dev/null
 fi
+DIR=$ROOT_DIR
+URI=$ROOT_URI
+# A plain push is the theme the reader wants to see, so it also takes the TV off any slot.
+[ "$MODE" = push ] && tv "$(del active_theme)" >/dev/null
 tv "printf '%s' '$REVISION' > $TMP-theme_revision; $(put theme_revision)" >/dev/null
 "$PY" -I theme_restart.py
+if [ "$MODE" = slot ]; then
+  echo "Theme $(basename "$THEME") is on the TV in slot $SLOT. Switch to it in Launcher settings, or with:" \
+    "tools/theme.sh --use $SLOT"
+  exit 0
+fi
 echo applied
 echo "Theme $(basename "$THEME") is on the TV. Undo with: tools/theme.sh --reset"

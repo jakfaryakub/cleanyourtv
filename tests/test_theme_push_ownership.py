@@ -369,8 +369,9 @@ class ThemePushTest(unittest.TestCase):
 
     def test_both_windows_paths_check_the_shared_helper_exit_code(self):
         script = (TOOLS / "theme.ps1").read_text(encoding="utf-8")
-        self.assertEqual(script.count("& $py -I theme_restart.py"), 2)
-        self.assertEqual(script.count("if ($LASTEXITCODE) { throw 'Home restart recovery failed' }"), 2)
+        # A push, -Reset and -Use (theme slots) restart Home, and each checks the helper's exit code.
+        self.assertEqual(script.count("& $py -I theme_restart.py"), 3)
+        self.assertEqual(script.count("if ($LASTEXITCODE) { throw 'Home restart recovery failed' }"), 3)
         self.assertNotIn("$restart =", script)
 
     def test_the_windows_script_puts_files_the_same_way(self):

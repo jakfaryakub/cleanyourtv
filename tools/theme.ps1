@@ -4,6 +4,13 @@
 # Usage: tools\theme.ps1 -TvHost 192.168.1.50 themes\aurora
 #        tools\theme.ps1 -TvHost 192.168.1.50 -Reset
 #
+# Theme slots, as in theme.sh (docs/PLAN.md, Phase 3):
+#        tools\theme.ps1 -Slot <slug> themes\aurora     # push into themes/<slug>/ on the TV, without switching to it
+#        tools\theme.ps1 -Use <slug|legacy|builtin>     # switch: a slot, the theme pushed without -Slot, or config.xml
+#        tools\theme.ps1 -List                          # the themes on the TV, their size, and the one in use
+#        tools\theme.ps1 -Delete <slug>                 # remove a slot (not the one in use)
+# Same slugs and limits as theme.sh (tools/theme_slots.py). A plain push and -Reset take the TV off any slot.
+#
 # One argument, and -Reset takes none: both together are refused rather than one of them dropped (below).
 # Exit status: 0 the theme is on the TV, or the reset ran; 1 the theme could not be pushed, or Home did not
 # restart after it (a failure of the shared helper stops this script with that status); 2 the run stopped
@@ -14,8 +21,29 @@
 param(
     [Parameter(Position = 0)][string]$Theme,
     [switch]$Reset,
+    [string]$Slot,
+    [string]$Use,
+    [switch]$List,
+    [string]$Delete,
     [string]$TvHost = $env:TV_HOST
 )
+# The slot forms, each alone on its command line ($Theme only with -Slot). The slug rule is the launcher's.
+$slotForms = @($Slot, $Use, $Delete | Where-Object { $_ }).Count + [int][bool]$List
+if ($slotForms -gt 1 -or ($slotForms -and $Reset) -or (($Use -or $Delete -or $List) -and $Theme) -or ($Slot -and -not $Theme)) {
+    [Console]::Error.WriteLine('usage: theme.ps1 -Slot <slug> <theme folder> | -Use <slug|legacy|builtin> | -List | -Delete <slug>. Nothing was sent to the TV.')
+    exit 2
+}
+function Test-Slug($name) { $name -cmatch '^[a-z0-9][a-z0-9-]{0,31}$' -and $name -ne 'legacy' -and $name -ne 'builtin' }
+foreach ($name in @($Slot, $Delete | Where-Object { $_ })) {
+    if (-not (Test-Slug $name)) {
+        [Console]::Error.WriteLine("unsupported slot name: $name (lower-case letters, digits and '-', at most 32, starting with a letter or digit, and not legacy or builtin). Nothing was sent to the TV.")
+        exit 2
+    }
+}
+if ($Use -and $Use -ne 'legacy' -and $Use -ne 'builtin' -and -not (Test-Slug $Use)) {
+    [Console]::Error.WriteLine("theme.ps1 -Use takes a slug, legacy or builtin, so $Use is not one. Nothing was sent to the TV.")
+    exit 2
+}
 # theme.sh judges its own command line here, and this is the same judgement: -Reset removes the theme from the
 # TV and a folder pushes it, so `-Reset themes\aurora` used to take the reset branch and throw the folder away
 # (the theme the reader named was removed instead of pushed), while `themes\aurora -Reset` pushed the theme and
@@ -67,6 +95,12 @@ $revision = [guid]::NewGuid().ToString('N')
 # remove our copy first. cp stays as the fallback for firmware without the provider.
 $uri = "content://$pkg.theme"
 $tmp = '/data/local/tmp/cyt-theme'
+# -Slot pushes the same files into themes/<slug>/; theme_revision and active_theme stay at the root, and nothing
+# makes the slot folder from the shell (the provider creates it with the first file), as in theme.sh.
+$rootDir = $dir
+$rootUri = $uri
+if ($Slot) { $dir = "$rootDir/themes/$Slot"; $uri = "$rootUri/themes/$Slot" }
+$query = "content query --uri $rootUri/themes"
 # A file's staging path; wallpapers/a.jpg is staged as $tmp-wallpapers-a.jpg.
 function Stage($name) { "$tmp-$($name -replace '/', '-')" }
 # Android 8 and 9 have no `content write`: they print "[ERROR] Unsupported operation: write" but exit 0, so
@@ -88,8 +122,28 @@ $clearFonts = "rm -f $dir/fonts/*.[tT][tT][fF] $dir/fonts/*.[oO][tT][fF] 2>/dev/
 $clearIcons = "rm -f $dir/icons/*.[pP][nN][gG] 2>/dev/null; content delete --uri $uri/icons 2>/dev/null"
 $clearWallpapers = "rm -f $dir/wallpapers/*.[jJ][pP][gG] $dir/wallpapers/*.[jJ][pP][eE][gG] $dir/wallpapers/*.[pP][nN][gG] $dir/wallpapers/*.[wW][eE][bB][pP] 2>/dev/null; content delete --uri $uri/wallpapers 2>/dev/null"
 
+if ($List) {
+    Invoke-Tv tv.py $query | & $py -I theme_slots.py list
+    exit 0
+}
+if ($Use) {
+    $why = Invoke-Tv tv.py $query | & $py -I theme_slots.py use $Use
+    if ($LASTEXITCODE) { [Console]::Error.WriteLine("$why Nothing was changed on the TV."); exit 2 }
+    Invoke-Tv tv.py "printf '%s' '$Use' > $tmp-active_theme; $(Put 'active_theme')" | Out-Null
+    & $py -I theme_restart.py
+    if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
+    Write-Host "Home now uses $Use. Undo with: tools\theme.ps1 -Use <slug|legacy|builtin>"
+    exit 0
+}
+if ($Delete) {
+    $why = Invoke-Tv tv.py $query | & $py -I theme_slots.py delete $Delete
+    if ($LASTEXITCODE) { [Console]::Error.WriteLine("$why Nothing was changed on the TV."); exit 2 }
+    Invoke-Tv tv.py "content delete --uri $rootUri/themes/$Delete 2>/dev/null; rm -rf $rootDir/themes/$Delete 2>/dev/null" | Out-Null
+    Write-Host "Slot $Delete is removed from the TV."
+    exit 0
+}
 if ($Reset) {
-    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $clearFonts; $clearIcons; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
+    Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; $(Drop 'active_theme'); $(Drop 'config.json'); $(Drop 'wallpaper.jpg'); $(Drop 'wallpaper.webp'); $(Drop 'wallpapers/captions.txt'); $clearWallpapers; $clearFonts; $clearIcons; printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
     & $py -I theme_restart.py
     if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
     Write-Host 'reset'
@@ -158,12 +212,21 @@ if (Test-Path $iconsDir -PathType Container) {
     }
 }
 
+if ($Slot) {
+    $answer = (@(Invoke-Tv tv.py $query) + '--df--' + @(Invoke-Tv tv.py 'df -k /sdcard')) -join "`n"
+    $fontName = if ($fonts.Count) { $fonts[0].Name } else { '' }
+    $why = $answer | & $py -I theme_slots.py check $Theme $Slot $fontName
+    if ($LASTEXITCODE) { [Console]::Error.WriteLine("$why Nothing was sent to the TV."); exit 2 }
+}
 # Tolerated, as in theme.sh: a TV that locks Android/data still takes the files through ThemeProvider.
-Invoke-Tv tv.py "mkdir -p $dir 2>/dev/null; true" | Out-Null
+Invoke-Tv tv.py "mkdir -p $rootDir 2>/dev/null; true" | Out-Null
 Invoke-Tv tv.py --push $config "$tmp-config.json" | Out-Null
 Invoke-Tv tv.py (Put 'config.json')
 $wall = Join-Path $Theme 'wallpaper.jpg'
 if (Test-Path $wall) { Invoke-Tv b64push.py $wall "$tmp-wallpaper.jpg"; Invoke-Tv tv.py (Put 'wallpaper.jpg') } else { Invoke-Tv tv.py (Drop 'wallpaper.jpg') | Out-Null }
+# The animated wallpaper (wallpaper_animated), as theme.sh sends it.
+$webp = Join-Path $Theme 'wallpaper.webp'
+if (Test-Path $webp) { Invoke-Tv b64push.py $webp "$tmp-wallpaper.webp"; Invoke-Tv tv.py (Put 'wallpaper.webp') } else { Invoke-Tv tv.py (Drop 'wallpaper.webp') | Out-Null }
 Invoke-Tv tv.py $clearWallpapers | Out-Null
 foreach ($image in $images) {
     Invoke-Tv b64push.py $image.FullName (Stage "wallpapers/$($image.Name)")
@@ -187,8 +250,16 @@ if (Test-Path $captions -PathType Leaf) {
 } else {
     Invoke-Tv tv.py (Drop 'wallpapers/captions.txt') | Out-Null
 }
+$dir = $rootDir
+$uri = $rootUri
+# A plain push is the theme the reader wants to see, so it also takes the TV off any slot.
+if (-not $Slot) { Invoke-Tv tv.py (Drop 'active_theme') | Out-Null }
 Invoke-Tv tv.py "printf '%s' '$revision' > $tmp-theme_revision; $(Put 'theme_revision')" | Out-Null
 & $py -I theme_restart.py
 if ($LASTEXITCODE) { throw 'Home restart recovery failed' }
+if ($Slot) {
+    Write-Host "Theme $(Split-Path $Theme -Leaf) is on the TV in slot $Slot. Switch to it in Launcher settings, or with: tools\theme.ps1 -Use $Slot"
+    exit 0
+}
 Write-Host 'applied'
 Write-Host "Theme $(Split-Path $Theme -Leaf) is on the TV. Undo with: tools\theme.ps1 -TvHost $TvHost -Reset"
